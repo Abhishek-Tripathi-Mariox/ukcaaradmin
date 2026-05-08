@@ -1,0 +1,59 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Pull, build, and reload on EC2
+        env:
+          EC2_USER: ${{ secrets.EC2_USER }}
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$EC2_USER@$EC2_HOST" DEPLOY_PATH="$DEPLOY_PATH" bash -s << 'EOF'
+            set -euo pipefail
+            cd "$DEPLOY_PATH"
+
+            echo "=== Pulling latest from main ==="
+            git fetch origin main
+            git reset --hard origin/main
+
+            echo "=== Installing dependencies ==="
+            npm ci
+
+            echo "=== Building (tsc + vite) ==="
+            npm run build
+
+            echo "=== Reloading web server ==="
+            if command -v pm2 >/dev/null 2>&1 && pm2 describe ukcaar-admin >/dev/null 2>&1; then
+              pm2 restart ukcaar-admin --update-env
+            elif systemctl is-active --quiet nginx; then
+              sudo systemctl reload nginx
+            else
+              echo "No known web server found. dist/ is updated; reload manually."
+            fi
+
+            echo "=== Deploy complete ==="
+          EOF
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

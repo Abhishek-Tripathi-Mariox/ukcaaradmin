@@ -218,10 +218,11 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
 
       {deleting && (
         <ConfirmModal
+          isOpen
           title={`Delete ${singularLabel}?`}
           message={`"${deleting.name}" will no longer appear in driver registration. Existing drivers who selected it keep their record.`}
-          confirmLabel="Delete"
-          danger
+          confirmText="Delete"
+          variant="danger"
           onConfirm={() => remove.mutate(deleting._id)}
           onClose={() => setDeleting(null)}
         />
@@ -259,6 +260,7 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
 
   return (
     <Modal
+      isOpen
       title={initial ? `Edit ${singularLabel}` : `New ${singularLabel}`}
       onClose={onClose}
     >
