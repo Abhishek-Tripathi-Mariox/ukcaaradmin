@@ -135,6 +135,9 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-left">Code</th>
                 <th className="px-3 py-2 text-left">Description</th>
+                {singularLabel === 'vehicle type' && (
+                  <th className="px-3 py-2">Tier</th>
+                )}
                 <th className="px-3 py-2">Order</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2"></th>
@@ -150,6 +153,19 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                   <td className="px-3 py-2 text-gray-500">
                     {row.description || '—'}
                   </td>
+                  {singularLabel === 'vehicle type' && (
+                    <td className="px-3 py-2 text-center">
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs ${
+                          row.tier === 'private'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}
+                      >
+                        {row.tier ?? 'instant'}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-3 py-2 text-center text-gray-500">
                     {row.sortOrder}
                   </td>
@@ -239,11 +255,17 @@ interface EditModalProps {
 }
 
 function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) {
+  // The same modal is reused for fuel types — they don't have a tier so we
+  // only show the dropdown for the vehicle-type variant.
+  const isVehicleType = singularLabel === 'vehicle type';
   const [name, setName] = useState(initial?.name ?? '');
   const [code, setCode] = useState(initial?.code ?? '');
   const [description, setDescription] = useState(initial?.description ?? '');
   const [sortOrder, setSortOrder] = useState(initial?.sortOrder ?? 0);
   const [isActive, setIsActive] = useState(initial?.isActive ?? true);
+  const [tier, setTier] = useState<'instant' | 'private'>(
+    initial?.tier ?? 'instant',
+  );
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -255,6 +277,7 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
       description: description.trim() || undefined,
       sortOrder,
       isActive,
+      ...(isVehicleType ? { tier } : {}),
     } as Partial<CatalogueType>);
   };
 
@@ -303,6 +326,24 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
             placeholder="Optional helper text"
           />
         </div>
+        {isVehicleType && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Service tier
+            </label>
+            <select
+              className="input"
+              value={tier}
+              onChange={(e) => setTier(e.target.value as 'instant' | 'private')}
+            >
+              <option value="instant">Instant — everyday rides (Mini, Sedan, Bike)</option>
+              <option value="private">Private — premium rides (Uber Black-style)</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Customers see Instant types under the "Instant" tab and Private types under the "Private" tab.
+            </p>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">

@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import { driversAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
@@ -638,6 +641,9 @@ function DriverDetailModal({
   const detailQuery = useQuery({
     queryKey: ['driver-detail', driverId],
     queryFn: async () => (await driversAPI.getById(driverId)).data?.data,
+    // Re-fetch every 15s so the Live location section in the Overview tab
+    // tracks the driver in near-real-time without a manual refresh.
+    refetchInterval: 15_000,
   });
   const statsQuery = useQuery({
     queryKey: ['driver-stats', driverId],
@@ -804,6 +810,13 @@ function DriverDetailModal({
                   <StatCard label="Earnings all-time" value={formatGBP(earnings.total)} />
                 </div>
               )}
+
+              <DriverLiveLocationSection
+                location={driver.driverProfile?.currentLocation}
+                isOnline={!!driver.driverProfile?.isOnline}
+                driverName={`${driver.firstName ?? ''} ${driver.lastName ?? ''}`.trim()}
+                updatedAt={(driver.driverProfile as any)?.locationUpdatedAt}
+              />
 
               <Section title="Vehicle">
                 <KV label="Make">{driver.driverProfile?.vehicleMake || '—'}</KV>
@@ -1153,4 +1166,124 @@ function driverStatusLabel(d: Driver): string {
   if (!d.isActive) return 'suspended';
   if (!d.isVerified) return 'pending';
   return 'verified';
+}
+
+// Leaflet bundlers strip default marker icon URLs — rebind once per module
+// load. Same approach the LiveMapPage uses; safe to call repeatedly.
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+  iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+  shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+});
+
+// 5km radius is the upper bound the admin should ever see. We pick a zoom
+// level whose horizontal coverage at the driver's latitude is roughly 10km
+// (so the 5km circle fits with a little breathing room) and lock the zoom
+// + pan bounds to that. Without this, an admin could zoom out to a country
+// view, which the spec forbids.
+const RADIUS_KM = 5;
+const RADIUS_M = RADIUS_KM * 1000;
+
+function FitToRadius({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    // Build a bounding box ~RADIUS_KM around the center, then fit the map to
+    // it. fitBounds picks the best zoom that shows the whole box; we then
+    // freeze that zoom as both min and max so the user can't drift further.
+    const latDelta = RADIUS_KM / 111;
+    const lngDelta =
+      RADIUS_KM /
+      (111 * Math.cos((center[0] * Math.PI) / 180) || 111);
+    const bounds = L.latLngBounds(
+      [center[0] - latDelta, center[1] - lngDelta],
+      [center[0] + latDelta, center[1] + lngDelta],
+    );
+    map.fitBounds(bounds, { animate: false, padding: [10, 10] });
+    const z = map.getZoom();
+    map.setMinZoom(z);
+    map.setMaxZoom(z + 4); // allow zooming IN for detail, never OUT past 20km
+    map.setMaxBounds(bounds.pad(0.25));
+  }, [center, map]);
+  return null;
+}
+
+function DriverLiveLocationSection({
+  location,
+  isOnline,
+  driverName,
+  updatedAt,
+}: {
+  location?: { lat: number; lng: number };
+  isOnline: boolean;
+  driverName: string;
+  updatedAt?: string | Date;
+}) {
+  return (
+    <div className="border-t pt-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-xs font-semibold uppercase text-gray-500">
+          Live location
+        </div>
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          <span
+            className={clsx(
+              'inline-block w-2 h-2 rounded-full',
+              isOnline ? 'bg-green-500' : 'bg-gray-400',
+            )}
+          />
+          {isOnline ? 'Online' : 'Offline'}
+          {updatedAt && (
+            <span className="ml-2">
+              · updated {format(new Date(updatedAt), 'p')}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {location ? (
+        <div className="rounded-lg overflow-hidden border border-gray-200">
+          <MapContainer
+            key={`${location.lat.toFixed(4)}-${location.lng.toFixed(4)}`}
+            center={[location.lat, location.lng]}
+            zoom={11}
+            style={{ height: 280, width: '100%' }}
+            scrollWheelZoom={false}
+            doubleClickZoom={false}
+          >
+            <TileLayer
+              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            />
+            <FitToRadius center={[location.lat, location.lng]} />
+            <Circle
+              center={[location.lat, location.lng]}
+              radius={RADIUS_M}
+              pathOptions={{
+                color: '#0097B3',
+                fillColor: '#0097B3',
+                fillOpacity: 0.08,
+                weight: 1,
+              }}
+            />
+            <Marker position={[location.lat, location.lng]} title={driverName} />
+          </MapContainer>
+          <div className="px-3 py-2 text-xs text-gray-500 bg-gray-50 flex items-center justify-between">
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="w-3 h-3" />
+              {location.lat.toFixed(5)}, {location.lng.toFixed(5)}
+            </span>
+            <span>{RADIUS_KM} km radius · OpenStreetMap</span>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+          <MapPin className="w-5 h-5 mx-auto mb-1 text-gray-400" />
+          {isOnline
+            ? 'Driver is online but has not reported a location yet.'
+            : 'Last known location not available.'}
+        </div>
+      )}
+    </div>
+  );
 }

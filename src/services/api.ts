@@ -444,6 +444,8 @@ export const supportAPI = {
     q?: string;
     startDate?: string;
     endDate?: string;
+    /** Filter by ticket tag — e.g. 'doc-update' for driver-requested document changes. */
+    tag?: string;
   }) => api.get('/admin/tickets', { params }),
 
   get: (id: string) => api.get(`/admin/tickets/${id}`),
@@ -675,6 +677,12 @@ export interface CatalogueType {
   description?: string;
   isActive: boolean;
   sortOrder: number;
+  /**
+   * Vehicle-type-only: which service tier this type belongs to. The
+   * customer app shows two tabs ("Instant" / "Private") and lists only
+   * the matching types. Fuel types ignore this field.
+   */
+  tier?: 'instant' | 'private';
   createdAt?: string;
   updatedAt?: string;
 }
