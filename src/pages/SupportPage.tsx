@@ -74,6 +74,7 @@ interface Ticket {
   reopenCount?: number;
   createdAt: string;
   updatedAt: string;
+  metadata?: Record<string, any>;
 }
 
 const STATUSES: TicketStatus[] = [
@@ -126,7 +127,16 @@ export default function SupportPage() {
     submittedByRole: string;
     q: string;
     assignedTo: string;
-  }>({ status: '', priority: '', category: '', submittedByRole: '', q: '', assignedTo: '' });
+    tag: string;
+  }>({
+    status: '',
+    priority: '',
+    category: '',
+    submittedByRole: '',
+    q: '',
+    assignedTo: '',
+    tag: '',
+  });
   const [openId, setOpenId] = useState<string | null>(null);
 
   const statsQ = useQuery({
@@ -154,6 +164,7 @@ export default function SupportPage() {
           submittedByRole: (filters.submittedByRole || undefined) as any,
           assignedTo: filters.assignedTo || undefined,
           q: filters.q || undefined,
+          tag: filters.tag || undefined,
         })
       ).data.data as {
         items: Ticket[];
@@ -302,6 +313,36 @@ export default function SupportPage() {
           value={stats?.status.closed ?? 0}
           icon={<Lock className="w-5 h-5 text-gray-500" />}
         />
+      </div>
+
+      {/* Quick filter pills */}
+      <div className="flex flex-wrap gap-2">
+        <button
+          onClick={() => {
+            setFilters((f) => ({ ...f, tag: '' }));
+            setPage(1);
+          }}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border ${
+            filters.tag === ''
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          All tickets
+        </button>
+        <button
+          onClick={() => {
+            setFilters((f) => ({ ...f, tag: 'doc-update' }));
+            setPage(1);
+          }}
+          className={`px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1 ${
+            filters.tag === 'doc-update'
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          Document update requests
+        </button>
       </div>
 
       {/* Filters */}
@@ -652,6 +693,31 @@ function TicketDetail({
             <Sidebar label="Category">
               <span className="capitalize">{ticket.category.replace(/_/g, ' ')}</span>
             </Sidebar>
+
+            {(ticket.tags ?? []).includes('doc-update') && (
+              <Sidebar label="Document update request">
+                <div className="text-xs space-y-1">
+                  <div>
+                    <span className="text-gray-500">Doc type: </span>
+                    <span className="font-medium capitalize">
+                      {(ticket.metadata?.docType as string)?.replace(/-/g, ' ') ?? '—'}
+                    </span>
+                  </div>
+                  {ticket.metadata?.newFileUrl ? (
+                    <a
+                      href={ticket.metadata.newFileUrl as string}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 hover:underline"
+                    >
+                      View proposed new file ↗
+                    </a>
+                  ) : (
+                    <div className="text-gray-500">No new file attached</div>
+                  )}
+                </div>
+              </Sidebar>
+            )}
 
             {ticket.slaDueAt && (
               <Sidebar label="SLA due">
