@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI } from '@/services/api';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
-import { Settings, Car, DollarSign, Save, Lock } from 'lucide-react';
+import { Settings, Car, Save, Lock } from 'lucide-react';
 import { ChangePasswordCard } from '@/components/ChangePasswordCard';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
