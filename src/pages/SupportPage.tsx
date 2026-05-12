@@ -1,5 +1,4 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -119,7 +118,6 @@ function userName(u?: User | null) {
 }
 
 export default function SupportPage() {
-  const navigate = useNavigate();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<{
