@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { dashboardAPI } from '@/services/api';
-import { StatCard, PageHeader, LoadingSpinner } from '@/components/common';
+import { StatCard, PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Users,
   Car,
@@ -29,7 +29,7 @@ import {
 import type { DashboardMetrics } from '@/types';
 
 export default function DashboardPage() {
-  const { data: metrics, isLoading: metricsLoading } = useQuery({
+  const { data: metrics, isLoading: metricsLoading, refetch: refetchMetrics, isFetching: metricsFetching } = useQuery({
     queryKey: ['dashboard'],
     queryFn: async () => {
       const res = await dashboardAPI.getMetrics();
@@ -38,7 +38,7 @@ export default function DashboardPage() {
     refetchInterval: 30000, // Refresh every 30 seconds
   });
 
-  const { data: rideAnalytics } = useQuery({
+  const { data: rideAnalytics, refetch: refetchRideAnalytics } = useQuery({
     queryKey: ['analytics', 'rides'],
     queryFn: async () => {
       const res = await dashboardAPI.getRideAnalytics('7d');
@@ -46,7 +46,7 @@ export default function DashboardPage() {
     },
   });
 
-  const { data: revenueAnalytics } = useQuery({
+  const { data: revenueAnalytics, refetch: refetchRevenueAnalytics } = useQuery({
     queryKey: ['analytics', 'revenue'],
     queryFn: async () => {
       const res = await dashboardAPI.getRevenueAnalytics('7d');
@@ -75,6 +75,12 @@ export default function DashboardPage() {
       <PageHeader
         title="Dashboard"
         subtitle="Welcome back! Here's what's happening with UKCAAR today."
+        actions={
+          <RefreshButton
+            onRefresh={() => { refetchMetrics(); refetchRideAnalytics(); refetchRevenueAnalytics(); }}
+            isFetching={metricsFetching}
+          />
+        }
       />
 
       {/* Stats Grid */}

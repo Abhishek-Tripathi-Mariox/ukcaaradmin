@@ -35,6 +35,7 @@ const ZonesPage = lazy(() => import('@/pages/ZonesPage'));
 const RoutesPage = lazy(() => import('@/pages/RoutesPage'));
 const NotificationTemplatesPage = lazy(() => import('@/pages/NotificationTemplatesPage'));
 const VehicleTypesPage = lazy(() => import('@/pages/VehicleTypesPage'));
+const FareCalculationPage = lazy(() => import('@/pages/FareCalculationPage'));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -251,6 +252,14 @@ function AppRoutes() {
             element={
               <PermissionGuard permission="view_settings">
                 <VehicleTypesPage />
+              </PermissionGuard>
+            }
+          />
+          <Route
+            path="fare-calculation"
+            element={
+              <PermissionGuard permission="view_settings">
+                <FareCalculationPage />
               </PermissionGuard>
             }
           />

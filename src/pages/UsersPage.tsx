@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
@@ -85,7 +85,7 @@ export default function UsersPage() {
   const [statusReason, setStatusReason] = useState('');
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['users', page, search, statusFilter],
     queryFn: async () => {
       const params: any = { page, limit: 10, role: 'customer' };
@@ -220,6 +220,7 @@ export default function UsersPage() {
       <PageHeader
         title="User Management"
         subtitle="Manage customer accounts and their status"
+        actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
 
       <div className="flex flex-col sm:flex-row gap-4 mb-6">

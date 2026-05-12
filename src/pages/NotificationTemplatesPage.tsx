@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationTemplatesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -36,7 +36,7 @@ export default function NotificationTemplatesPage() {
   const [deleting, setDeleting] = useState<Template | null>(null);
   const [testing, setTesting] = useState<Template | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['notification-templates', search, typeFilter],
     queryFn: async () =>
       (
@@ -62,6 +62,7 @@ export default function NotificationTemplatesPage() {
       <PageHeader
         title="Notification Templates"
         subtitle="Authorable push + in-app messages with variables and locale variants"
+        actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">

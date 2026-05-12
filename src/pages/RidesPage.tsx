@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ridesAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
-import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { Modal, ConfirmModal } from '@/components/Modal';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
@@ -14,9 +14,12 @@ import {
   XCircle,
   RefreshCw,
   Navigation,
+  UserPlus,
+  KeyRound,
+  Flag,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { format } from 'date-fns';
+import { format, differenceInMinutes } from 'date-fns';
 import clsx from 'clsx';
 import type { Ride } from '@/types';
 
@@ -33,6 +36,8 @@ export default function RidesPage() {
   const [showReassignModal, setShowReassignModal] = useState(false);
   const [showFareModal, setShowFareModal] = useState(false);
   const [showDisputeModal, setShowDisputeModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [rideToComplete, setRideToComplete] = useState<string | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [refundPercentage, setRefundPercentage] = useState(100);
   const [newDriverId, setNewDriverId] = useState('');
@@ -42,9 +47,84 @@ export default function RidesPage() {
   const [disputeResolution, setDisputeResolution] = useState('');
   const [refundAmount, setRefundAmount] = useState(0);
   const [disputeNotes, setDisputeNotes] = useState('');
+  // Manual driver-assign modal — for `searching` rides where no driver
+  // picked up the auto-dispatch. Admin types a name/phone, gets the
+  // matching drivers within 7 km of the pickup, and clicks one to assign.
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [assignSearch, setAssignSearch] = useState('');
+  const [assignSearchDebounced, setAssignSearchDebounced] = useState('');
+  // OTP-confirm modal — admin types the 4-digit code the customer reads
+  // out (or copies from the ride doc) so we can start the trip from the
+  // admin console without needing the driver app to type it in.
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpInput, setOtpInput] = useState('');
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  // Debounce the assign-modal search so we don't fire a request on every
+  // keystroke. 250ms — short enough to feel live, long enough that typing
+  // a 10-digit phone doesn't kick off 10 round-trips.
+  useEffect(() => {
+    const t = setTimeout(() => setAssignSearchDebounced(assignSearch.trim()), 250);
+    return () => clearTimeout(t);
+  }, [assignSearch]);
+
+  // Nearby drivers within 7 km, filtered by the search box. Only runs when
+  // the modal is open and we have a ride id — no point pre-fetching.
+  const { data: assignNearby, isLoading: assignLoading } = useQuery({
+    queryKey: ['admin-assign-nearby', selectedRide?._id, assignSearchDebounced],
+    queryFn: async () => {
+      if (!selectedRide?._id) return { drivers: [], radiusKm: 7 };
+      const res = await ridesAPI.nearbyDrivers(selectedRide._id, assignSearchDebounced || undefined);
+      return res.data?.data ?? { drivers: [], radiusKm: 7 };
+    },
+    enabled: showAssignModal && !!selectedRide?._id,
+    refetchInterval: showAssignModal ? 15000 : false,
+  });
+
+  const assignMutation = useMutation({
+    mutationFn: ({ rideId, driverId }: { rideId: string; driverId: string }) =>
+      ridesAPI.assignDriver(rideId, driverId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rides'] });
+      toast.success('Driver assigned — alerts sent');
+      setShowAssignModal(false);
+      setAssignSearch('');
+      setAssignSearchDebounced('');
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'Failed to assign driver';
+      toast.error(msg);
+    },
+  });
+
+  const verifyOtpMutation = useMutation({
+    mutationFn: ({ rideId, otp }: { rideId: string; otp: string }) =>
+      ridesAPI.verifyOtp(rideId, otp),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rides'] });
+      toast.success('Trip started — both apps notified');
+      setShowOtpModal(false);
+      setOtpInput('');
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'OTP verification failed';
+      toast.error(msg);
+    },
+  });
+
+  const completeMutation = useMutation({
+    mutationFn: ({ rideId }: { rideId: string }) => ridesAPI.complete(rideId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['rides'] });
+      toast.success('Ride completed — both apps notified');
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? 'Failed to complete ride';
+      toast.error(msg);
+    },
+  });
+
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['rides', tab, page, search, statusFilter],
     queryFn: async () => {
       const params: any = { page, limit: 10 };
@@ -52,7 +132,7 @@ export default function RidesPage() {
       
       if (tab === 'live') {
         const res = await ridesAPI.getLive();
-        return { data: res.data.data, pagination: null };
+        return { data: res.data.data?.rides ?? [], pagination: null };
       } else if (tab === 'disputes') {
         if (statusFilter) params.status = statusFilter;
         const res = await ridesAPI.getDisputes(params);
@@ -134,6 +214,10 @@ export default function RidesPage() {
         return 'text-blue-600 bg-blue-50';
       case 'in_progress':
         return 'text-indigo-600 bg-indigo-50';
+      case 'payment_pending':
+        return 'text-amber-600 bg-amber-50';
+      case 'reserved':
+        return 'text-blue-600 bg-blue-50';
       case 'completed':
         return 'text-green-600 bg-green-50';
       case 'cancelled':
@@ -153,6 +237,15 @@ export default function RidesPage() {
           <div className="text-sm text-gray-500">
             {format(new Date(ride.createdAt), 'MMM d, yyyy HH:mm')}
           </div>
+          <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
+            ride.isScheduled
+              ? 'bg-blue-100 text-blue-700'
+              : ride.rideType === 'private'
+              ? 'bg-purple-100 text-purple-700'
+              : 'bg-green-100 text-green-700'
+          }`}>
+            {ride.isScheduled ? 'Scheduled' : ride.rideType === 'private' ? 'Private' : 'Instant'}
+          </span>
         </div>
       ),
     },
@@ -204,7 +297,7 @@ export default function RidesPage() {
       key: 'fare',
       header: 'Fare',
       render: (ride: Ride) => (
-        <div className="font-medium">₹{ride.fare?.total?.toFixed(2) || '0.00'}</div>
+        <div className="font-medium">₹{(ride.actualFare ?? ride.estimatedFare ?? 0).toFixed(2)}</div>
       ),
     },
     {
@@ -235,7 +328,7 @@ export default function RidesPage() {
           >
             <Eye className="w-4 h-4 text-gray-500" />
           </button>
-          {['searching', 'driver_assigned', 'driver_arriving', 'driver_arrived', 'in_progress'].includes(ride.status) && (
+          {['searching', 'driver_assigned', 'driver_arriving', 'driver_arrived', 'in_progress', 'payment_pending'].includes(ride.status) && (
             <>
               <button
                 onClick={(e) => {
@@ -261,6 +354,48 @@ export default function RidesPage() {
                   <RefreshCw className="w-4 h-4 text-blue-500" />
                 </button>
               )}
+              {ride.status === 'searching' && !ride.driver && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRide(ride);
+                    setAssignSearch('');
+                    setAssignSearchDebounced('');
+                    setShowAssignModal(true);
+                  }}
+                  className="p-2 hover:bg-emerald-50 rounded-lg"
+                  title="Manually assign a driver"
+                >
+                  <UserPlus className="w-4 h-4 text-emerald-500" />
+                </button>
+              )}
+              {['driver_assigned', 'driver_arriving', 'driver_arrived'].includes(ride.status) && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedRide(ride);
+                    setOtpInput('');
+                    setShowOtpModal(true);
+                  }}
+                  className="p-2 hover:bg-amber-50 rounded-lg"
+                  title="Verify pickup OTP and start trip"
+                >
+                  <KeyRound className="w-4 h-4 text-amber-500" />
+                </button>
+              )}
+              {ride.status === 'in_progress' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRideToComplete(ride._id);
+                    setShowCompleteModal(true);
+                  }}
+                  className="p-2 hover:bg-violet-50 rounded-lg"
+                  title="Complete ride"
+                >
+                  <Flag className="w-4 h-4 text-violet-500" />
+                </button>
+              )}
             </>
           )}
           {ride.status === 'completed' && (
@@ -268,7 +403,7 @@ export default function RidesPage() {
               onClick={(e) => {
                 e.stopPropagation();
                 setSelectedRide(ride);
-                setNewFare(ride.fare?.total || 0);
+                setNewFare(ride.actualFare ?? ride.estimatedFare ?? 0);
                 setShowFareModal(true);
               }}
               className="p-2 hover:bg-yellow-50 rounded-lg"
@@ -300,6 +435,7 @@ export default function RidesPage() {
       <PageHeader
         title="Ride Management"
         subtitle="Monitor and manage all rides"
+        actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
 
       {/* Tabs */}
@@ -364,6 +500,8 @@ export default function RidesPage() {
                 <option value="searching">Searching</option>
                 <option value="driver_assigned">Driver Assigned</option>
                 <option value="in_progress">In Progress</option>
+                <option value="payment_pending">Payment Pending</option>
+                <option value="reserved">Reserved (Scheduled)</option>
                 <option value="completed">Completed</option>
                 <option value="cancelled">Cancelled</option>
               </>
@@ -403,7 +541,7 @@ export default function RidesPage() {
               </div>
               <div className="mt-3 pt-3 border-t border-current/20 flex items-center justify-between">
                 <span>{ride.customer?.firstName} {ride.customer?.lastName}</span>
-                <span className="font-medium">₹{ride.fare?.total?.toFixed(2)}</span>
+                <span className="font-medium">₹{(ride.actualFare ?? ride.estimatedFare ?? 0).toFixed(2)}</span>
               </div>
             </div>
           ))}
@@ -437,6 +575,23 @@ export default function RidesPage() {
           </>
         )
       )}
+
+      {/* Complete Ride Confirm Modal */}
+      <ConfirmModal
+        isOpen={showCompleteModal}
+        onClose={() => { setShowCompleteModal(false); setRideToComplete(null); }}
+        onConfirm={() => {
+          if (rideToComplete) completeMutation.mutate({ rideId: rideToComplete });
+          setShowCompleteModal(false);
+          setRideToComplete(null);
+        }}
+        title="Complete Ride"
+        message="Mark this ride as completed? Both the customer and driver will be notified and the fare will be settled."
+        confirmText="Complete Ride"
+        cancelText="Cancel"
+        variant="info"
+        isLoading={completeMutation.isPending}
+      />
 
       {/* Ride Details Modal */}
       <Modal
@@ -494,37 +649,43 @@ export default function RidesPage() {
                 <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Base Fare</span>
-                    <span>₹{selectedRide.fare?.baseFare?.toFixed(2) || '0.00'}</span>
+                    <span>₹{(selectedRide.baseFare ?? 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Distance Fare</span>
-                    <span>₹{selectedRide.fare?.distanceFare?.toFixed(2) || '0.00'}</span>
+                    <span>₹{(selectedRide.distanceFare ?? 0).toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Time Fare</span>
-                    <span>₹{selectedRide.fare?.timeFare?.toFixed(2) || '0.00'}</span>
+                    <span>₹{(selectedRide.timeFare ?? 0).toFixed(2)}</span>
                   </div>
-                  {selectedRide.fare?.surgeFare > 0 && (
+                  {(selectedRide.surgeFare ?? 0) > 0 && (
                     <div className="flex justify-between text-orange-600">
                       <span>Surge</span>
-                      <span>₹{selectedRide.fare?.surgeFare?.toFixed(2)}</span>
+                      <span>₹{selectedRide.surgeFare.toFixed(2)}</span>
                     </div>
                   )}
-                  {selectedRide.fare?.discount > 0 && (
+                  {(selectedRide.discount ?? 0) > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Discount</span>
-                      <span>-₹{selectedRide.fare?.discount?.toFixed(2)}</span>
+                      <span>-₹{selectedRide.discount.toFixed(2)}</span>
                     </div>
                   )}
-                  {selectedRide.fare?.tip > 0 && (
+                  {(selectedRide.tip ?? 0) > 0 && (
                     <div className="flex justify-between">
                       <span>Tip</span>
-                      <span>₹{selectedRide.fare?.tip?.toFixed(2)}</span>
+                      <span>₹{selectedRide.tip.toFixed(2)}</span>
+                    </div>
+                  )}
+                  {selectedRide.status === 'completed' && (selectedRide.actualDistance ?? 0) > 0 && (
+                    <div className="flex justify-between text-gray-500 text-xs">
+                      <span>Distance</span>
+                      <span>{(selectedRide.actualDistance ?? selectedRide.estimatedDistance ?? 0).toFixed(2)} km</span>
                     </div>
                   )}
                   <div className="flex justify-between font-semibold pt-2 border-t">
                     <span>Total</span>
-                    <span>₹{selectedRide.fare?.total?.toFixed(2) || '0.00'}</span>
+                    <span>₹{(selectedRide.actualFare ?? selectedRide.estimatedFare ?? 0).toFixed(2)}</span>
                   </div>
                 </div>
               </div>
@@ -539,7 +700,7 @@ export default function RidesPage() {
                   <div className="text-gray-500">{selectedRide.customer?.email}</div>
                 </div>
               </div>
-              {selectedRide.driver && (
+              {selectedRide.driver ? (
                 <div>
                   <h4 className="font-medium text-gray-900 mb-2">Driver</h4>
                   <div className="text-sm">
@@ -548,28 +709,108 @@ export default function RidesPage() {
                     <div className="text-gray-500">{selectedRide.driver?.driverProfile?.plateNumber}</div>
                   </div>
                 </div>
-              )}
+              ) : selectedRide.status === 'searching' ? (
+                <div>
+                  <h4 className="font-medium text-gray-900 mb-2">Driver</h4>
+                  <div className="text-sm text-gray-500 mb-3">
+                    Still searching — no driver has accepted yet.
+                  </div>
+                  <button
+                    onClick={() => {
+                      setAssignSearch('');
+                      setAssignSearchDebounced('');
+                      setShowAssignModal(true);
+                    }}
+                    className="btn btn-primary inline-flex items-center gap-2 text-sm"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Assign a nearby driver
+                  </button>
+                </div>
+              ) : null}
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <MapPin className="w-5 h-5 mx-auto text-gray-400 mb-1" />
-                <div className="text-lg font-semibold">{selectedRide.distance?.toFixed(1) || '-'}</div>
-                <div className="text-sm text-gray-500">miles</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <Clock className="w-5 h-5 mx-auto text-gray-400 mb-1" />
-                <div className="text-lg font-semibold">{selectedRide.duration || '-'}</div>
-                <div className="text-sm text-gray-500">minutes</div>
-              </div>
-              <div className="bg-gray-50 rounded-lg p-4 text-center">
-                <CreditCard className="w-5 h-5 mx-auto text-gray-400 mb-1" />
-                <div className="text-lg font-semibold capitalize">{selectedRide.paymentMethod}</div>
-                <div className="text-sm text-gray-500">
-                  <StatusBadge status={selectedRide.paymentStatus} />
+            {/* Lifecycle controls — confirm OTP / complete from admin while
+                the driver app's flow isn't end-to-end. */}
+            {['driver_assigned', 'driver_arriving', 'driver_arrived', 'in_progress'].includes(selectedRide.status) && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
+                <div>
+                  <h4 className="font-medium text-amber-900 mb-1">Test controls</h4>
+                  <p className="text-xs text-amber-700">
+                    Drive the ride lifecycle from admin while the driver app's
+                    OTP/complete flow is still being wired. Both customer and
+                    driver get socket + push notifications when you act here.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {['driver_assigned', 'driver_arriving', 'driver_arrived'].includes(selectedRide.status) && (
+                    <button
+                      onClick={() => {
+                        setOtpInput('');
+                        setShowOtpModal(true);
+                      }}
+                      className="btn btn-primary inline-flex items-center gap-2 text-sm"
+                    >
+                      <KeyRound className="w-4 h-4" />
+                      Verify OTP & start trip
+                    </button>
+                  )}
+                  {selectedRide.status === 'in_progress' && (
+                    <button
+                      onClick={() => {
+                        setRideToComplete(selectedRide._id);
+                        setShowCompleteModal(true);
+                      }}
+                      disabled={completeMutation.isPending}
+                      className="btn btn-primary inline-flex items-center gap-2 text-sm"
+                    >
+                      <Flag className="w-4 h-4" />
+                      Complete ride
+                    </button>
+                  )}
                 </div>
               </div>
-            </div>
+            )}
+
+            {(() => {
+              const distKm = (selectedRide.actualDistance ?? selectedRide.estimatedDistance ?? 0);
+              const startTime = selectedRide.startedAt;
+              const endTime = selectedRide.completedAt;
+              const durationMins = startTime && endTime
+                ? differenceInMinutes(new Date(endTime), new Date(startTime))
+                : (selectedRide.actualDuration ?? selectedRide.estimatedDuration ?? null);
+              const durationLabel = durationMins != null
+                ? durationMins < 60
+                  ? `${durationMins} min`
+                  : `${Math.floor(durationMins / 60)}h ${durationMins % 60}m`
+                : '-';
+              return (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <MapPin className="w-5 h-5 mx-auto text-gray-400 mb-1" />
+                    <div className="text-lg font-semibold">{distKm > 0 ? `${distKm.toFixed(2)} km` : '-'}</div>
+                    <div className="text-sm text-gray-500">Distance</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <Clock className="w-5 h-5 mx-auto text-gray-400 mb-1" />
+                    <div className="text-base font-semibold">{startTime ? format(new Date(startTime), 'HH:mm') : '-'}</div>
+                    <div className="text-xs text-gray-400">{startTime ? format(new Date(startTime), 'MMM d') : ''}</div>
+                    <div className="text-sm text-gray-500">Start</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <Clock className="w-5 h-5 mx-auto text-gray-400 mb-1" />
+                    <div className="text-base font-semibold">{endTime ? format(new Date(endTime), 'HH:mm') : '-'}</div>
+                    <div className="text-xs text-gray-400">{endTime ? format(new Date(endTime), 'MMM d') : ''}</div>
+                    <div className="text-sm text-gray-500">End</div>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4 text-center">
+                    <CreditCard className="w-5 h-5 mx-auto text-gray-400 mb-1" />
+                    <div className="text-base font-semibold">{durationLabel}</div>
+                    <div className="text-sm text-gray-500">Duration</div>
+                  </div>
+                </div>
+              );
+            })()}
 
             {selectedRide.dispute && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -705,6 +946,180 @@ export default function RidesPage() {
         </div>
       </Modal>
 
+      {/* Manual Driver Assign Modal — for searching rides where auto-dispatch
+          didn't land. Lists drivers within 7 km of the pickup, filterable
+          by name or phone. Clicking a row force-assigns and triggers the
+          ride:driver-assigned / ride:assigned events on the customer and
+          driver apps respectively. */}
+      <Modal
+        isOpen={showAssignModal}
+        onClose={() => {
+          setShowAssignModal(false);
+          setAssignSearch('');
+          setAssignSearchDebounced('');
+        }}
+        title="Assign a nearby driver"
+        size="lg"
+      >
+        {selectedRide && (
+          <div className="space-y-4">
+            <div className="text-sm text-gray-600">
+              Pickup: <span className="font-medium text-gray-900">{selectedRide.pickup?.address}</span>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={assignSearch}
+                onChange={(e) => setAssignSearch(e.target.value)}
+                placeholder="Search by driver name or phone number…"
+                className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+            <div className="text-xs text-gray-500">
+              Showing online drivers within {assignNearby?.radiusKm ?? 7} km of the pickup.
+              {assignNearby?.drivers?.length ? ` ${assignNearby.drivers.length} match${assignNearby.drivers.length === 1 ? '' : 'es'}.` : ''}
+            </div>
+
+            <div className="max-h-80 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+              {assignLoading ? (
+                <div className="p-6 text-center">
+                  <LoadingSpinner />
+                </div>
+              ) : !assignNearby?.drivers?.length ? (
+                <div className="p-6 text-center text-sm text-gray-500">
+                  {assignSearchDebounced
+                    ? `No drivers within 7 km matching "${assignSearchDebounced}".`
+                    : 'No online drivers within 7 km of the pickup.'}
+                </div>
+              ) : (
+                assignNearby.drivers.map((d: any) => {
+                  const fullName = [d.firstName, d.lastName].filter(Boolean).join(' ') || 'Driver';
+                  const vehicle = [d.vehicle?.color, d.vehicle?.make, d.vehicle?.model]
+                    .filter(Boolean)
+                    .join(' ');
+                  return (
+                    <div
+                      key={d._id}
+                      className="flex items-center justify-between p-3 hover:bg-emerald-50 transition-colors"
+                    >
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-gray-900 truncate">{fullName}</div>
+                        <div className="text-xs text-gray-500">{d.phone}</div>
+                        {vehicle && (
+                          <div className="text-xs text-gray-500 truncate">
+                            {vehicle}
+                            {d.vehicle?.plate ? ` · ${d.vehicle.plate}` : ''}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 ml-3 shrink-0">
+                        <div className="text-right">
+                          <div className="text-sm font-medium text-gray-900">{d.distanceKm.toFixed(1)} km</div>
+                          <div className="text-xs text-gray-500">★ {(d.rating ?? 5).toFixed(1)}</div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (!selectedRide?._id) return;
+                            assignMutation.mutate({
+                              rideId: selectedRide._id,
+                              driverId: d._id,
+                            });
+                          }}
+                          disabled={assignMutation.isPending}
+                          className="btn btn-primary text-xs px-3 py-1.5"
+                        >
+                          Assign
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                onClick={() => {
+                  setShowAssignModal(false);
+                  setAssignSearch('');
+                  setAssignSearchDebounced('');
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Pickup-OTP confirmation. Same effect as the driver typing the
+          rider's OTP — flips status to in_progress and broadcasts to
+          both apps. */}
+      <Modal
+        isOpen={showOtpModal}
+        onClose={() => {
+          setShowOtpModal(false);
+          setOtpInput('');
+        }}
+        title="Verify pickup OTP"
+      >
+        {selectedRide && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              Confirm the 4-digit OTP the rider reads out to the driver.
+              The system OTP for this ride is{' '}
+              <span className="font-mono font-semibold text-gray-900">
+                {(selectedRide as any).pickupOtp ?? '— already used —'}
+              </span>
+              .
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                OTP *
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={4}
+                value={otpInput}
+                onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, '').slice(0, 4))}
+                placeholder="0000"
+                className="w-32 px-3 py-2 border border-gray-300 rounded-lg text-center text-lg font-mono tracking-[0.4em] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowOtpModal(false);
+                  setOtpInput('');
+                }}
+                className="btn btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (selectedRide?._id && otpInput.length === 4) {
+                    verifyOtpMutation.mutate({
+                      rideId: selectedRide._id,
+                      otp: otpInput,
+                    });
+                  }
+                }}
+                disabled={otpInput.length !== 4 || verifyOtpMutation.isPending}
+                className="btn btn-primary"
+              >
+                Verify & start trip
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* Fare Adjustment Modal */}
       <Modal
         isOpen={showFareModal}
@@ -720,7 +1135,7 @@ export default function RidesPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Original Fare
             </label>
-            <div className="text-lg font-semibold">₹{selectedRide?.fare?.total?.toFixed(2)}</div>
+            <div className="text-lg font-semibold">₹{(selectedRide?.actualFare ?? selectedRide?.estimatedFare ?? 0).toFixed(2)}</div>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -817,7 +1232,7 @@ export default function RidesPage() {
                 className="input"
                 step="0.01"
                 min={0}
-                max={selectedRide?.fare?.total || 0}
+                max={selectedRide?.actualFare ?? selectedRide?.estimatedFare ?? 0}
               />
             </div>
           )}

@@ -172,11 +172,48 @@ export const ridesAPI = {
   getHeatmap: (params?: { startDate?: string; endDate?: string }) =>
     api.get('/admin/rides/heatmap', { params }),
   
+  // Backend exposes PUT /admin/rides/:id/cancel and accepts a boolean `refund`
+  // plus an optional `refundAmount`. We translate the legacy `refundPercentage`
+  // arg here so existing call sites keep working without touching every
+  // ride-management screen.
   cancel: (id: string, reason: string, refundPercentage?: number) =>
-    api.post(`/admin/rides/${id}/cancel`, { reason, refundPercentage }),
+    api.put(`/admin/rides/${id}/cancel`, {
+      reason,
+      refund: refundPercentage != null && refundPercentage > 0,
+      // refundAmount left undefined → backend defaults to actualFare or
+      // estimatedFare. If a future caller needs partial refunds we can add
+      // a `refundAmount` arg without touching the backend.
+    }),
   
   reassign: (id: string, newDriverId: string, reason: string) =>
-    api.post(`/admin/rides/${id}/reassign`, { newDriverId, reason }),
+    api.put(`/admin/rides/${id}/reassign`, { driverId: newDriverId, reason }),
+
+  // Drivers within 7 km of the ride's pickup, optionally filtered by
+  // name/phone substring. Used by the manual-assign picker on the ride
+  // detail page.
+  nearbyDrivers: (rideId: string, q?: string) =>
+    api.get(`/admin/rides/${rideId}/nearby-drivers`, {
+      params: q ? { q } : {},
+    }),
+
+  // Force-assign a driver to a still-searching ride. Triggers
+  // `ride:driver-assigned` on the customer and `ride:assigned` on the
+  // driver so both apps navigate automatically.
+  assignDriver: (rideId: string, driverId: string) =>
+    api.post(`/admin/rides/${rideId}/assign-driver`, { driverId }),
+
+  // Admin-side OTP confirmation. Same effect as the driver-side verify-otp
+  // but callable from the admin console — flips the ride to in_progress
+  // and broadcasts the status change. Used while we test the customer
+  // flow without a real driver app.
+  verifyOtp: (rideId: string, otp: string) =>
+    api.post(`/admin/rides/${rideId}/verify-otp`, { otp }),
+
+  // Admin-side completion. Mirrors the driver-side status='completed'
+  // transition — actual fare, commission, driver-earnings credits + push
+  // to both parties.
+  complete: (rideId: string) =>
+    api.post(`/admin/rides/${rideId}/complete`),
   
   adjustFare: (id: string, newFare: number, reason: string) =>
     api.patch(`/admin/rides/${id}/fare`, { newFare, reason }),
@@ -264,9 +301,9 @@ export const chatAPI = {
 // ════════════════════════════════════════════════════════════════════
 
 export const settingsAPI = {
-  getFareConfig: () => api.get('/admin/settings/fare'),
+  getFareConfig: () => api.get('/admin/settings/fares'),
   
-  updateFareConfig: (config: any) => api.patch('/admin/settings/fare', config),
+  updateFareConfig: (config: any) => api.patch('/admin/settings/fares', config),
   
   getGeneral: () => api.get('/admin/settings/general'),
   
@@ -683,6 +720,13 @@ export interface CatalogueType {
    * the matching types. Fuel types ignore this field.
    */
   tier?: 'instant' | 'private';
+  // Vehicle-type-only pricing. The customer's /rides/estimate and the
+  // ride-create flow look these up by code and fall back to the legacy
+  // baseFares table when a field is blank.
+  baseFare?: number;
+  perKmFare?: number;
+  perMinFare?: number;
+  minFare?: number;
   createdAt?: string;
   updatedAt?: string;
 }

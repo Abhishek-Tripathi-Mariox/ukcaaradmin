@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import L from 'leaflet';
-import 'leaflet.heat';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Flame } from 'lucide-react';
 import { reportsAPI } from '@/services/api';
-import { PageHeader, LoadingSpinner } from '@/components/common';
+import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
 const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946]; // Bengaluru
 
@@ -24,35 +23,115 @@ interface HeatmapData {
   points: HeatPoint[];
 }
 
-function HeatLayer({ points, max }: { points: HeatPoint[]; max: number }) {
+/** Maps a 0–1 intensity to a CSS rgba color on a white → deep-red scale. */
+function intensityToColor(intensity: number): string {
+  // Clamp
+  const t = Math.max(0, Math.min(1, intensity));
+  // white (255,255,255) → orange-red (255,80,0) → deep red (180,0,0)
+  let r: number, g: number, b: number;
+  if (t < 0.5) {
+    const s = t / 0.5;
+    r = 255;
+    g = Math.round(255 - s * 175); // 255 → 80
+    b = Math.round(255 - s * 255); // 255 → 0
+  } else {
+    const s = (t - 0.5) / 0.5;
+    r = Math.round(255 - s * 75);  // 255 → 180
+    g = Math.round(80 - s * 80);   // 80  → 0
+    b = 0;
+  }
+  const opacity = 0.25 + t * 0.65; // 0.25 → 0.90
+  return `rgba(${r},${g},${b},${opacity})`;
+}
+
+/** Returns the pixel radius for a circle marker based on intensity (0–1). */
+function circleRadius(intensity: number): number {
+  // 10px minimum, up to 28px for hottest cells
+  return 10 + Math.round(intensity * 18);
+}
+
+function HeatLayer({
+  points,
+  max,
+  precision,
+}: {
+  points: HeatPoint[];
+  max: number;
+  precision: number;
+}) {
   const map = useMap();
+
   useEffect(() => {
     if (!points.length) return;
-    const data = points.map((p) => [p.lat, p.lng, p.weight] as [number, number, number]);
-    const layer = (L as any).heatLayer(data, {
-      radius: 25,
-      blur: 18,
-      maxZoom: 17,
-      max: Math.max(max, 1),
-      gradient: {
-        0.2: '#3b82f6',
-        0.4: '#10b981',
-        0.6: '#f59e0b',
-        0.8: '#f97316',
-        1.0: '#ef4444',
-      },
-    }).addTo(map);
 
-    // Fit map to points
-    if (points.length > 0) {
-      const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 13 });
-    }
+    // Sort so high-intensity dots are drawn on top
+    const sorted = [...points].sort((a, b) => a.weight - b.weight);
+    const layers: L.CircleMarker[] = [];
+
+    sorted.forEach((p) => {
+      const intensity = p.weight / Math.max(max, 1);
+      const color = intensityToColor(intensity);
+      const radius = circleRadius(intensity);
+
+      const circle = L.circleMarker([p.lat, p.lng], {
+        radius,
+        color: 'transparent',
+        fillColor: color,
+        fillOpacity: 1,
+        weight: 0,
+      });
+
+      circle.bindTooltip(
+        `<strong>${p.weight} ride${p.weight !== 1 ? 's' : ''}</strong>`,
+        { sticky: true }
+      );
+      circle.addTo(map);
+      layers.push(circle);
+    });
+
+    // Fit map to all points
+    const bounds = L.latLngBounds(points.map((p) => [p.lat, p.lng] as [number, number]));
+    if (bounds.isValid()) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
 
     return () => {
-      map.removeLayer(layer);
+      layers.forEach((l) => map.removeLayer(l));
     };
-  }, [points, max, map]);
+  }, [points, max, precision, map]);
+
+  return null;
+}
+
+/** Floating color-scale legend rendered as a Leaflet control */
+function HeatLegend({ max }: { max: number }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const legend = new L.Control({ position: 'bottomright' });
+
+    legend.onAdd = () => {
+      const div = L.DomUtil.create('div');
+      div.style.cssText =
+        'background:white;padding:8px 10px;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.3);font-size:11px;line-height:1.4;min-width:120px';
+
+      const steps = 5;
+      let html = '<div style="font-weight:600;margin-bottom:4px">Ride demand</div>';
+      for (let i = steps; i >= 0; i--) {
+        const t = i / steps;
+        const rides = Math.round(t * max);
+        const color = intensityToColor(t);
+        html += `<div style="display:flex;align-items:center;gap:6px;margin:2px 0">
+          <span style="width:16px;height:14px;display:inline-block;background:${color};border-radius:2px;flex-shrink:0"></span>
+          <span>${rides} ride${rides !== 1 ? 's' : ''}</span>
+        </div>`;
+      }
+      div.innerHTML = html;
+      return div;
+    };
+
+    legend.addTo(map);
+    return () => { map.removeControl(legend); };
+  }, [map, max]);
+
   return null;
 }
 
@@ -86,6 +165,7 @@ export default function HeatmapPage() {
       <PageHeader
         title="Demand heatmap"
         subtitle="Pickup / dropoff density by location"
+        actions={<RefreshButton onRefresh={() => q.refetch()} isFetching={q.isFetching} />}
       />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex flex-wrap gap-3 items-end">
@@ -186,7 +266,10 @@ export default function HeatmapPage() {
                 attribution='&copy; OpenStreetMap'
               />
               {data && data.points.length > 0 && (
-                <HeatLayer points={data.points} max={data.maxWeight} />
+                <>
+                  <HeatLayer points={data.points} max={data.maxWeight} precision={data.precision} />
+                  <HeatLegend max={data.maxWeight} />
+                </>
               )}
             </MapContainer>
           )}

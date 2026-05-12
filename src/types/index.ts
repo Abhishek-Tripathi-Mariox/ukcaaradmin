@@ -68,19 +68,28 @@ export interface Ride {
   pickup: Location;
   dropoff: Location;
   stops?: Location[];
-  vehicleType: 'standard' | 'comfort' | 'xl';
+  rideType: string;
+  isScheduled?: boolean;
+  scheduledAt?: string;
+  vehicleType?: 'standard' | 'comfort' | 'xl';
   status: 'searching' | 'driver_assigned' | 'driver_arriving' | 'driver_arrived' | 'in_progress' | 'completed' | 'cancelled';
-  fare: {
-    baseFare: number;
-    distanceFare: number;
-    timeFare: number;
-    surgeFare: number;
-    discount: number;
-    tip: number;
-    total: number;
-  };
-  distance: number;
-  duration: number;
+  // Flat fare fields as stored/returned by the backend
+  estimatedFare: number;
+  actualFare?: number;
+  baseFare: number;
+  distanceFare: number;
+  timeFare: number;
+  surgeFare: number;
+  discount: number;
+  tip: number;
+  commission: number;
+  driverEarnings: number;
+  estimatedDistance: number;
+  estimatedDuration: number;
+  actualDistance?: number;
+  actualDuration?: number;
+  distance?: number;
+  duration?: number;
   paymentMethod: 'card' | 'cash' | 'wallet';
   paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
   rating?: number;
@@ -95,6 +104,7 @@ export interface Ride {
     resolvedAt?: string;
   };
   createdAt: string;
+  startedAt?: string;
   completedAt?: string;
 }
 

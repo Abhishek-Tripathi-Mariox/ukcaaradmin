@@ -10,6 +10,12 @@ export interface PlaceValue {
   address: string;
   lat: number;
   lng: number;
+  /** Postal code parsed from the autocomplete suggestion. Captured so a
+   *  route stop can persist the rider-matchable PIN even when the
+   *  formatted `address` string doesn't include it (Nominatim sometimes
+   *  drops the PIN for sparse rural records, e.g. "Aligarh, Uttar Pradesh,
+   *  India"). */
+  pincode?: string;
 }
 
 interface Props {
@@ -88,16 +94,56 @@ export function PlaceSearchInput({
   }, [query, countryCodes]);
 
   const pick = (p: GeoPlace) => {
+    // Prefer the structured PIN from the autocomplete payload; as a
+    // safety net try to pull one out of the formatted address (last 6
+    // digits — typical Indian-format PIN position).
+    const pinFromParts = p.parts?.pincode?.trim();
+    const pinFromAddress = (p.address || p.displayName || '').match(/\b\d{6}\b/g)?.pop();
+    const resolvedName = p.parts?.road
+      ? [p.parts.road, p.parts.area || p.parts.city].filter(Boolean).join(', ')
+      : p.address || p.displayName;
+    const resolvedAddress = p.address || p.displayName;
+    const initialPincode = pinFromParts || pinFromAddress || undefined;
+
     onChange({
-      name: p.parts?.road
-        ? [p.parts.road, p.parts.area || p.parts.city].filter(Boolean).join(', ')
-        : p.address || p.displayName,
-      address: p.address || p.displayName,
+      name: resolvedName,
+      address: resolvedAddress,
       lat: p.lat,
       lng: p.lng,
+      pincode: initialPincode,
     });
-    setQuery(p.address || p.displayName);
+    setQuery(resolvedAddress);
     setOpen(false);
+
+    // Autocomplete often returns region-level entries with no postal_code
+    // (e.g. "Aligarh, Uttar Pradesh, India" returns parts.pincode=''). A
+    // reverse geocode at the exact lat/lng falls back to a precise
+    // building-level Nominatim result that almost always carries one.
+    // Fire-and-forget — the form is already usable; the PIN field
+    // populates when the reverse lookup resolves a few hundred ms later.
+    if (!initialPincode && p.lat && p.lng) {
+      geoAPI
+        .reverse(p.lat, p.lng)
+        .then((res) => {
+          const rev = (res.data as any)?.data;
+          const revPin: string | undefined =
+            (rev?.parts?.pincode || '').toString().trim() ||
+            ((rev?.address || rev?.displayName || '').match(/\b\d{6}\b/g) ?? []).pop() ||
+            undefined;
+          if (revPin) {
+            onChange({
+              name: resolvedName,
+              address: resolvedAddress,
+              lat: p.lat,
+              lng: p.lng,
+              pincode: revPin,
+            });
+          }
+        })
+        .catch(() => {
+          /* keep the field empty; admin can type it in manually */
+        });
+    }
   };
 
   const clear = () => {

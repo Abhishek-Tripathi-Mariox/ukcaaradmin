@@ -19,18 +19,29 @@ import {
   StatusBadge,
   LoadingSpinner,
   EmptyState,
+  RefreshButton,
 } from '@/components/common';
 
 type Tab = 'overview' | 'tiers' | 'rewards' | 'accounts' | 'redemptions';
 
 export default function LoyaltyPage() {
+  const qcMain = useQueryClient();
   const [tab, setTab] = useState<Tab>('overview');
+
+  const handleRefresh = () => {
+    qcMain.refetchQueries({ queryKey: ['loyalty-stats'] });
+    qcMain.refetchQueries({ queryKey: ['loyalty-tiers'] });
+    qcMain.refetchQueries({ queryKey: ['loyalty-rewards'] });
+    qcMain.refetchQueries({ queryKey: ['loyalty-accounts'] });
+    qcMain.refetchQueries({ queryKey: ['loyalty-redemptions'] });
+  };
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Customer loyalty"
         subtitle="Tiers, rewards, points balances and redemptions"
+        actions={<RefreshButton onRefresh={handleRefresh} />}
       />
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">

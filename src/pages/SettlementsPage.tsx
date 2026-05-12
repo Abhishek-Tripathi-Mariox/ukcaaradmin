@@ -6,7 +6,7 @@ import { Upload, RefreshCw, CheckCircle, AlertTriangle, Search } from 'lucide-re
 import { financeAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 
 interface Settlement {
   _id: string;
@@ -169,6 +169,7 @@ export default function SettlementsPage() {
         subtitle="Razorpay settlement reports and reconciliation status"
         actions={
           <div className="flex gap-2">
+            <RefreshButton onRefresh={() => listQ.refetch()} isFetching={listQ.isFetching} />
             <button
               onClick={() => reconcile.mutate(undefined)}
               disabled={reconcile.isPending}

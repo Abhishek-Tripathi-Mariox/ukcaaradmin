@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { settingsAPI } from '@/services/api';
-import { PageHeader, LoadingSpinner } from '@/components/common';
+import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import { Settings, Car, DollarSign, Save, Lock } from 'lucide-react';
 import { ChangePasswordCard } from '@/components/ChangePasswordCard';
 import toast from 'react-hot-toast';
@@ -10,10 +10,10 @@ import clsx from 'clsx';
 type TabType = 'fare' | 'general' | 'security';
 
 export default function SettingsPage() {
-  const [tab, setTab] = useState<TabType>('fare');
+  const [tab, setTab] = useState<TabType>('general');
   const queryClient = useQueryClient();
 
-  const { data: fareConfig, isLoading: fareLoading } = useQuery({
+  const { data: fareConfig, isLoading: fareLoading, refetch: refetchFare, isFetching: fareFetching } = useQuery({
     queryKey: ['settings', 'fare'],
     queryFn: async () => {
       const res = await settingsAPI.getFareConfig();
@@ -21,7 +21,7 @@ export default function SettingsPage() {
     },
   });
 
-  const { data: generalSettings, isLoading: generalLoading } = useQuery({
+  const { data: generalSettings, isLoading: generalLoading, refetch: refetchGeneral } = useQuery({
     queryKey: ['settings', 'general'],
     queryFn: async () => {
       const res = await settingsAPI.getGeneral();
@@ -65,12 +65,18 @@ export default function SettingsPage() {
       <PageHeader
         title="Settings"
         subtitle="Configure application settings"
+        actions={
+          <RefreshButton
+            onRefresh={() => { refetchFare(); refetchGeneral(); }}
+            isFetching={fareFetching}
+          />
+        }
       />
 
       {/* Tabs */}
       <div className="flex gap-2 mb-6 border-b border-gray-200">
         {[
-          { key: 'fare', label: 'Fare Configuration', icon: DollarSign },
+          // { key: 'fare', label: 'Fare Configuration', icon: DollarSign },
           { key: 'general', label: 'General Settings', icon: Settings },
           { key: 'security', label: 'Security', icon: Lock },
         ].map(({ key, label, icon: Icon }) => (
