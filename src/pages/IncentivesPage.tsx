@@ -17,6 +17,7 @@ import {
   StatusBadge,
   LoadingSpinner,
   EmptyState,
+  RefreshButton,
 } from '@/components/common';
 
 interface Incentive {
@@ -85,15 +86,18 @@ export default function IncentivesPage() {
         title="Driver incentives"
         subtitle="Performance-based bonuses and payouts"
         actions={
-          <button
-            onClick={() => {
-              setEditing(null);
-              setCreateOpen(true);
-            }}
-            className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" /> New incentive
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={() => rulesQ.refetch()} isFetching={rulesQ.isFetching} />
+            <button
+              onClick={() => {
+                setEditing(null);
+                setCreateOpen(true);
+              }}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" /> New incentive
+            </button>
+          </div>
         }
       />
 

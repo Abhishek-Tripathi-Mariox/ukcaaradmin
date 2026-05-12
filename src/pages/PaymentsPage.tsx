@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { paymentsAPI, walletsAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
@@ -39,7 +39,7 @@ export default function PaymentsPage() {
   const [selectedPayouts, setSelectedPayouts] = useState<string[]>([]);
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['payments', tab, page, search, typeFilter, statusFilter],
     queryFn: async () => {
       if (tab === 'payouts') {
@@ -216,13 +216,16 @@ export default function PaymentsPage() {
         title="Payment Management"
         subtitle="Manage transactions, refunds, and payouts"
         actions={
-          <button
-            onClick={() => setShowWalletModal(true)}
-            className="btn btn-primary"
-          >
-            <Wallet className="w-4 h-4 mr-2" />
-            Adjust Wallet
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={refetch} isFetching={isFetching} />
+            <button
+              onClick={() => setShowWalletModal(true)}
+              className="btn btn-primary"
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              Adjust Wallet
+            </button>
+          </div>
         }
       />
 

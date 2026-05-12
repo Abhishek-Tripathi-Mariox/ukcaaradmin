@@ -6,7 +6,7 @@ import 'leaflet/dist/leaflet.css';
 import { driversAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
@@ -327,6 +327,7 @@ export default function DriversPage() {
       <PageHeader
         title="Driver Management"
         subtitle="Drivers, applications, documents, rides and earnings"
+        actions={<RefreshButton onRefresh={() => listQuery.refetch()} isFetching={listQuery.isFetching} />}
       />
 
       <div className="flex gap-2 mb-6 border-b border-gray-200">

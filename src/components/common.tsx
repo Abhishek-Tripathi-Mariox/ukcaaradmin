@@ -1,4 +1,5 @@
 import clsx from 'clsx';
+import { RefreshCw } from 'lucide-react';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -23,6 +24,10 @@ const statusVariants: Record<string, BadgeVariant> = {
   driver_arriving: 'info',
   driver_arrived: 'info',
   in_progress: 'info',
+  payment_pending: 'warning',
+  // Scheduled-shuttle seat reservation surfaced on the admin Rides
+  // table — coloured blue so it's distinct from in-flight rides.
+  reserved: 'info',
   completed: 'success',
   cancelled: 'danger',
   
@@ -133,6 +138,25 @@ interface PageHeaderProps {
   title: string;
   subtitle?: string;
   actions?: React.ReactNode;
+}
+
+// ── Shared refresh button ────────────────────────────────────────────────────
+interface RefreshButtonProps {
+  onRefresh: () => void;
+  isFetching?: boolean;
+}
+
+export function RefreshButton({ onRefresh, isFetching = false }: RefreshButtonProps) {
+  return (
+    <button
+      onClick={onRefresh}
+      disabled={isFetching}
+      className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+    >
+      <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
+      Refresh
+    </button>
+  );
 }
 
 export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {

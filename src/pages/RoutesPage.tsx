@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { routesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, LoadingSpinner } from '@/components/common';
+import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import { PlaceSearchInput } from '@/components/PlaceSearchInput';
 import { Plus, Pencil, Trash2, MapPin, Users, UserCog } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -18,6 +18,11 @@ interface Stop {
   lng: number;
   sequence: number;
   fareFromPrevious: number;
+  /** Postal code for this stop. Picker captures it from the autocomplete
+   *  result; the admin can override / type one in for stops where the
+   *  geocoder didn't return one. Used by the customer scheduled-route
+   *  lookup to match riders by PIN. */
+  pincode?: string;
 }
 
 interface Departure {
@@ -35,6 +40,7 @@ interface RouteForm {
   schedule?: {
     daysOfWeek: number[];
     departures: Departure[];
+    returnDepartures: Departure[];
     seatPrice?: number;
     vehicleType?: string;
     totalSeats?: number;
@@ -48,6 +54,7 @@ const emptyStop = (i: number): Stop => ({
   lng: 0,
   sequence: i,
   fareFromPrevious: 0,
+  pincode: undefined,
 });
 
 const blankForm = (): RouteForm => ({
@@ -60,6 +67,7 @@ const blankForm = (): RouteForm => ({
   schedule: {
     daysOfWeek: [1, 2, 3, 4, 5],
     departures: [],
+    returnDepartures: [],
     seatPrice: 0,
     vehicleType: '',
     totalSeats: 0,
@@ -84,7 +92,7 @@ export default function RoutesPage() {
     return p;
   }, [filter]);
 
-  const { data: routes = [], isLoading } = useQuery({
+  const { data: routes = [], isLoading, refetch, isFetching } = useQuery({
     queryKey: ['routes', queryParams],
     queryFn: async () => (await routesAPI.list(queryParams)).data?.data?.routes ?? [],
   });
@@ -106,12 +114,15 @@ export default function RoutesPage() {
         title="Routes"
         subtitle="Curated corridors used by Private and Scheduled (shuttle) ride products"
         actions={
-          <button
-            className="btn-primary inline-flex items-center gap-2"
-            onClick={() => setCreating(true)}
-          >
-            <Plus size={16} /> New route
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={refetch} isFetching={isFetching} />
+            <button
+              className="btn-primary inline-flex items-center gap-2"
+              onClick={() => setCreating(true)}
+            >
+              <Plus size={16} /> New route
+            </button>
+          </div>
         }
       />
 
@@ -325,11 +336,16 @@ function toFormValue(r: any): RouteForm {
             sequence: typeof s.sequence === 'number' ? s.sequence : i,
             fareFromPrevious:
               i === 0 ? 0 : Number(s.fareFromPrevious) || 0,
+            // Without this the saved PIN was correctly persisted but never
+            // re-hydrated into the edit form — the field appeared empty
+            // and a save would overwrite it back to undefined.
+            pincode: s.pincode ? String(s.pincode) : undefined,
           }))
         : [emptyStop(0), emptyStop(1)],
     schedule: {
       daysOfWeek: r.schedule?.daysOfWeek ?? [1, 2, 3, 4, 5],
       departures: r.schedule?.departures ?? [],
+      returnDepartures: r.schedule?.returnDepartures ?? [],
       seatPrice: r.schedule?.seatPrice ?? 0,
       vehicleType: r.schedule?.vehicleType ?? '',
       totalSeats: r.schedule?.totalSeats ?? 0,
@@ -418,12 +434,17 @@ function RouteFormModal({
           lng: Number(s.lng),
           sequence: i,
           fareFromPrevious: i === 0 ? 0 : Number(s.fareFromPrevious) || 0,
+          pincode: s.pincode?.trim() || undefined,
         })),
       };
       if (isScheduled) {
         payload.schedule = {
           daysOfWeek: form.schedule?.daysOfWeek ?? [],
           departures: (form.schedule?.departures ?? []).map((d) => ({
+            stopIndex: Number(d.stopIndex),
+            time: d.time,
+          })),
+          returnDepartures: (form.schedule?.returnDepartures ?? []).map((d) => ({
             stopIndex: Number(d.stopIndex),
             time: d.time,
           })),
@@ -467,7 +488,7 @@ function RouteFormModal({
       return {
         ...f,
         schedule: {
-          ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+          ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
           daysOfWeek: days.includes(d)
             ? days.filter((x) => x !== d)
             : [...days, d].sort(),
@@ -480,7 +501,7 @@ function RouteFormModal({
     setForm((f) => ({
       ...f,
       schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
         departures: [
           ...(f.schedule?.departures ?? []),
           { stopIndex: 0, time: '09:00' },
@@ -492,7 +513,7 @@ function RouteFormModal({
     setForm((f) => ({
       ...f,
       schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
         departures: (f.schedule?.departures ?? []).map((d, i) =>
           i === idx ? { ...d, ...patch } : d
         ),
@@ -503,8 +524,40 @@ function RouteFormModal({
     setForm((f) => ({
       ...f,
       schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
         departures: (f.schedule?.departures ?? []).filter((_, i) => i !== idx),
+      },
+    }));
+
+  const addReturnDeparture = () =>
+    setForm((f) => ({
+      ...f,
+      schedule: {
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
+        returnDepartures: [
+          ...(f.schedule?.returnDepartures ?? []),
+          { stopIndex: 0, time: '17:00' },
+        ],
+      },
+    }));
+
+  const updateReturnDeparture = (idx: number, patch: Partial<Departure>) =>
+    setForm((f) => ({
+      ...f,
+      schedule: {
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
+        returnDepartures: (f.schedule?.returnDepartures ?? []).map((d, i) =>
+          i === idx ? { ...d, ...patch } : d
+        ),
+      },
+    }));
+
+  const removeReturnDeparture = (idx: number) =>
+    setForm((f) => ({
+      ...f,
+      schedule: {
+        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
+        returnDepartures: (f.schedule?.returnDepartures ?? []).filter((_, i) => i !== idx),
       },
     }));
 
@@ -629,6 +682,7 @@ function RouteFormModal({
                               address: s.address ?? '',
                               lat: s.lat,
                               lng: s.lng,
+                              pincode: s.pincode,
                             }
                           : null
                       }
@@ -638,10 +692,33 @@ function RouteFormModal({
                           address: v?.address ?? '',
                           lat: v?.lat ?? 0,
                           lng: v?.lng ?? 0,
+                          // Picker captures it; admin can override below.
+                          pincode: v?.pincode,
                         })
                       }
                       placeholder={`Search stop #${i + 1}…`}
                     />
+                    <div className="mt-2">
+                      <label className="text-[11px] text-gray-500 block mb-0.5">
+                        Pincode{' '}
+                        <span className="text-gray-400">
+                          (auto-filled from search; required for rider PIN match)
+                        </span>
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={10}
+                        className="input max-w-[180px]"
+                        placeholder="e.g. 207123"
+                        value={s.pincode ?? ''}
+                        onChange={(e) =>
+                          updateStop(i, {
+                            pincode: e.target.value.replace(/\D/g, '') || undefined,
+                          })
+                        }
+                      />
+                    </div>
                     {errors.stopFields?.[i] && (
                       <p className="text-[11px] text-red-600 mt-1">
                         {errors.stopFields[i]}
@@ -708,7 +785,7 @@ function RouteFormModal({
                     setForm((f) => ({
                       ...f,
                       schedule: {
-                        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+                        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
                         seatPrice: Number(e.target.value),
                       },
                     }))
@@ -726,7 +803,7 @@ function RouteFormModal({
                     setForm((f) => ({
                       ...f,
                       schedule: {
-                        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+                        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
                         totalSeats: Number(e.target.value),
                       },
                     }))
@@ -743,7 +820,7 @@ function RouteFormModal({
                     setForm((f) => ({
                       ...f,
                       schedule: {
-                        ...(f.schedule ?? { daysOfWeek: [], departures: [] }),
+                        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
                         vehicleType: e.target.value,
                       },
                     }))
@@ -824,6 +901,63 @@ function RouteFormModal({
                 {(form.schedule?.departures ?? []).length === 0 && (
                   <div className="text-xs text-gray-500">
                     No departures yet.
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <label className="text-xs text-gray-600">Return departures (optional)</label>
+                <button className="btn-ghost text-xs" onClick={addReturnDeparture}>
+                  + Add return departure
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2">
+                Leave empty if this route doesn't run a return leg. Drivers who
+                opt into round-trip on their registration will offer these
+                times to customers.
+              </p>
+              <div className="space-y-2">
+                {(form.schedule?.returnDepartures ?? []).map((d, i) => (
+                  <div
+                    key={i}
+                    className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded"
+                  >
+                    <select
+                      className="input col-span-7"
+                      value={d.stopIndex}
+                      onChange={(e) =>
+                        updateReturnDeparture(i, {
+                          stopIndex: Number(e.target.value),
+                        })
+                      }
+                    >
+                      {form.stops.map((s, si) => (
+                        <option key={si} value={si}>
+                          #{si + 1} {s.name || '(unnamed)'}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="time"
+                      className="input col-span-4"
+                      value={d.time}
+                      onChange={(e) =>
+                        updateReturnDeparture(i, { time: e.target.value })
+                      }
+                    />
+                    <button
+                      className="col-span-1 text-red-600"
+                      onClick={() => removeReturnDeparture(i)}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                ))}
+                {(form.schedule?.returnDepartures ?? []).length === 0 && (
+                  <div className="text-xs text-gray-500">
+                    No return departures.
                   </div>
                 )}
               </div>

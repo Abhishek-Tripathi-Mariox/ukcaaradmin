@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { onePassAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner, StatCard } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, StatCard, RefreshButton } from '@/components/common';
 import {
   Search,
   Crown,
@@ -44,7 +44,7 @@ export default function OnePassPage() {
     },
   });
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['onepass', 'subscribers', page, search, statusFilter],
     queryFn: async () => {
       const params: any = { page, limit: 10 };
@@ -210,13 +210,16 @@ export default function OnePassPage() {
         title="OnePass Management"
         subtitle="Manage driver subscription plans"
         actions={
-          <button
-            onClick={() => setShowGrantModal(true)}
-            className="btn btn-primary"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Grant OnePass
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={refetch} isFetching={isFetching} />
+            <button
+              onClick={() => setShowGrantModal(true)}
+              className="btn btn-primary"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Grant OnePass
+            </button>
+          </div>
         }
       />
 

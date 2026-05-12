@@ -8,18 +8,25 @@ import {
   CatalogueType,
 } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, LoadingSpinner } from '@/components/common';
+import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
 type Tab = 'vehicle' | 'fuel';
 
 export default function VehicleTypesPage() {
+  const qcMain = useQueryClient();
   const [tab, setTab] = useState<Tab>('vehicle');
+
+  const handleRefresh = () => {
+    qcMain.refetchQueries({ queryKey: ['admin-vehicle-types'] });
+    qcMain.refetchQueries({ queryKey: ['admin-fuel-types'] });
+  };
 
   return (
     <div>
       <PageHeader
         title="Vehicle & Fuel Types"
         subtitle="Manage the dropdown options drivers see during registration"
+        actions={<RefreshButton onRefresh={handleRefresh} />}
       />
 
       <div className="border-b mb-4 flex gap-1">
@@ -138,6 +145,9 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                 {singularLabel === 'vehicle type' && (
                   <th className="px-3 py-2">Tier</th>
                 )}
+                {singularLabel === 'vehicle type' && (
+                  <th className="px-3 py-2 text-left">Fare</th>
+                )}
                 <th className="px-3 py-2">Order</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2"></th>
@@ -164,6 +174,23 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                       >
                         {row.tier ?? 'instant'}
                       </span>
+                    </td>
+                  )}
+                  {singularLabel === 'vehicle type' && (
+                    <td className="px-3 py-2 text-xs text-gray-600">
+                      {row.baseFare != null || row.perKmFare != null || row.perMinFare != null ? (
+                        <span>
+                          {row.baseFare != null ? `₹${row.baseFare} base` : ''}
+                          {row.perKmFare != null
+                            ? `${row.baseFare != null ? ' · ' : ''}₹${row.perKmFare}/km`
+                            : ''}
+                          {row.perMinFare != null
+                            ? `${row.baseFare != null || row.perKmFare != null ? ' · ' : ''}₹${row.perMinFare}/min`
+                            : ''}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400">Default</span>
+                      )}
                     </td>
                   )}
                   <td className="px-3 py-2 text-center text-gray-500">
@@ -266,6 +293,21 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
   const [tier, setTier] = useState<'instant' | 'private'>(
     initial?.tier ?? 'instant',
   );
+  // Pricing fields — vehicle-type only. We track each as a string so the
+  // input can hold a blank state (= "not configured, use fallback"); the
+  // submit handler parses to number or leaves undefined.
+  const fmt = (v: number | undefined) => (v === undefined || v === null ? '' : String(v));
+  const [baseFare, setBaseFare] = useState(fmt(initial?.baseFare));
+  const [perKmFare, setPerKmFare] = useState(fmt(initial?.perKmFare));
+  const [perMinFare, setPerMinFare] = useState(fmt(initial?.perMinFare));
+  const [minFare, setMinFare] = useState(fmt(initial?.minFare));
+
+  const parseFare = (v: string): number | undefined => {
+    const t = v.trim();
+    if (!t) return undefined;
+    const n = parseFloat(t);
+    return Number.isFinite(n) && n >= 0 ? n : undefined;
+  };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -277,7 +319,15 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
       description: description.trim() || undefined,
       sortOrder,
       isActive,
-      ...(isVehicleType ? { tier } : {}),
+      ...(isVehicleType
+        ? {
+            tier,
+            baseFare: parseFare(baseFare),
+            perKmFare: parseFare(perKmFare),
+            perMinFare: parseFare(perMinFare),
+            minFare: parseFare(minFare),
+          }
+        : {}),
     } as Partial<CatalogueType>);
   };
 
@@ -342,6 +392,76 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
             <p className="mt-1 text-xs text-gray-500">
               Customers see Instant types under the "Instant" tab and Private types under the "Private" tab.
             </p>
+          </div>
+        )}
+
+        {isVehicleType && (
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+            <div className="text-sm font-medium text-amber-900 mb-1">Fare rules</div>
+            <p className="text-xs text-amber-800 mb-3">
+              These rates drive every ride priced as this vehicle type — the
+              fare shown to the customer on Select Ride, the fare stored on
+              the ride doc, and the receipt on completion. Leave any field
+              blank to fall back to the default for the bucket.
+            </p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Base fare (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={baseFare}
+                  onChange={(e) => setBaseFare(e.target.value)}
+                  placeholder="e.g. 49"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Per km (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={perKmFare}
+                  onChange={(e) => setPerKmFare(e.target.value)}
+                  placeholder="e.g. 12"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Per minute (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={perMinFare}
+                  onChange={(e) => setPerMinFare(e.target.value)}
+                  placeholder="e.g. 1.5"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Minimum fare (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  className="input"
+                  value={minFare}
+                  onChange={(e) => setMinFare(e.target.value)}
+                  placeholder="e.g. 30"
+                />
+              </div>
+            </div>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">

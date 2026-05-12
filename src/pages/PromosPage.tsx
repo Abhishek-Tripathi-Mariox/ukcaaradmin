@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { promoAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
@@ -42,7 +42,7 @@ export default function PromosPage() {
   });
   const queryClient = useQueryClient();
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['promos', page, search, statusFilter],
     queryFn: async () => {
       const params: any = { page, limit: 10 };
@@ -264,16 +264,19 @@ export default function PromosPage() {
         title="Promo Codes"
         subtitle="Create and manage promotional codes"
         actions={
-          <button
-            onClick={() => {
-              resetForm();
-              setShowForm(true);
-            }}
-            className="btn btn-primary"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Create Promo Code
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={refetch} isFetching={isFetching} />
+            <button
+              onClick={() => {
+                resetForm();
+                setShowForm(true);
+              }}
+              className="btn btn-primary"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Create Promo Code
+            </button>
+          </div>
         }
       />
 

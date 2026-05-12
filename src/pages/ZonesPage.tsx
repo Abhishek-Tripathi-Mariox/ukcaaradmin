@@ -2,7 +2,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { zonesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import { Plus, Pencil, Trash2, MapPin, Activity, Zap } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -32,13 +32,20 @@ const hhmmToMinutes = (s: string) => {
 // ════════════════════════════════════════════════════════════════════
 
 export default function ZonesPage() {
+  const qcMain = useQueryClient();
   const [tab, setTab] = useState<'zones' | 'rules' | 'probe'>('zones');
+
+  const handleRefresh = () => {
+    qcMain.refetchQueries({ queryKey: ['zones'] });
+    qcMain.refetchQueries({ queryKey: ['surge-rules'] });
+  };
 
   return (
     <div>
       <PageHeader
         title="Zones & Surge"
         subtitle="Geofenced areas, surge multipliers and time-based pricing rules"
+        actions={<RefreshButton onRefresh={handleRefresh} />}
       />
 
       <div className="flex gap-2 border-b mb-6">

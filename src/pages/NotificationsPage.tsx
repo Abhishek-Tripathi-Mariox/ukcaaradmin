@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationsAPI } from '@/services/api';
-import { PageHeader } from '@/components/common';
+import { PageHeader, RefreshButton } from '@/components/common';
 import { Pagination } from '@/components/DataTable';
 import { Bell, Send, Users, Car, Globe, History, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -84,6 +84,7 @@ export default function NotificationsPage() {
       <PageHeader
         title="Notifications"
         subtitle="Send push notifications to users"
+        actions={<RefreshButton onRefresh={() => sentQuery.refetch()} isFetching={sentQuery.isFetching} />}
       />
 
       {/* Tabs */}

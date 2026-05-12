@@ -4,7 +4,7 @@ import { governanceAPI } from '@/services/api';
 import { useAuthStore } from '@/store/authStore';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   ADMIN_ROLES,
   ADMIN_ROLE_LABELS,
@@ -45,7 +45,7 @@ export default function AdminsPage() {
   const [confirmDisable, setConfirmDisable] = useState<AdminRow | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['admins', page, search, roleFilter],
     queryFn: async () => {
       const res = await governanceAPI.listAdmins({
@@ -213,15 +213,18 @@ export default function AdminsPage() {
         title="Admin Users"
         subtitle="Manage admin accounts, roles, and permissions"
         actions={
-          canManage && (
-            <button
-              onClick={() => setShowInvite(true)}
-              className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
-            >
-              <Plus className="w-4 h-4" />
-              Invite Admin
-            </button>
-          )
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={refetch} isFetching={isFetching} />
+            {canManage && (
+              <button
+                onClick={() => setShowInvite(true)}
+                className="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg"
+              >
+                <Plus className="w-4 h-4" />
+                Invite Admin
+              </button>
+            )}
+          </div>
         }
       />
 

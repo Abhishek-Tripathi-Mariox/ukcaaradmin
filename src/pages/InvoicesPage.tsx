@@ -6,7 +6,7 @@ import { Download, FileText, Plus, X } from 'lucide-react';
 import { financeAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge } from '@/components/common';
+import { PageHeader, StatusBadge, RefreshButton } from '@/components/common';
 
 type InvoiceType = 'customer' | 'driver_payout' | 'tds_certificate';
 type InvoiceStatus = 'draft' | 'issued' | 'cancelled' | 'sent';
@@ -175,12 +175,15 @@ export default function InvoicesPage() {
         title="Tax Invoices"
         subtitle="GST invoices for customers and TDS-applied driver payouts"
         actions={
-          <button
-            onClick={() => setShowCreate(true)}
-            className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
-          >
-            <Plus className="w-4 h-4" /> New invoice
-          </button>
+          <div className="flex gap-2">
+            <RefreshButton onRefresh={() => listQ.refetch()} isFetching={listQ.isFetching} />
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex items-center gap-1 px-3 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700"
+            >
+              <Plus className="w-4 h-4" /> New invoice
+            </button>
+          </div>
         }
       />
 

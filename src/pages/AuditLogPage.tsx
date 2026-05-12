@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { governanceAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import { format } from 'date-fns';
 import { Eye, Filter } from 'lucide-react';
 
@@ -41,7 +41,7 @@ export default function AuditLogPage() {
   });
   const [selected, setSelected] = useState<AuditEntry | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['audit-logs', page, filters],
     queryFn: async () => {
       const params: any = { page, limit: 50 };
@@ -149,6 +149,7 @@ export default function AuditLogPage() {
       <PageHeader
         title="Audit Log"
         subtitle="Every admin action recorded for compliance & investigation"
+        actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
 
       <div className="bg-white rounded-xl shadow-sm p-4 mb-4">

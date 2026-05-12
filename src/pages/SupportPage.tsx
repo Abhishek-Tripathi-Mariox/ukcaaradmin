@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, formatDistanceToNow } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -15,7 +16,7 @@ import {
 import { supportAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge } from '@/components/common';
+import { PageHeader, StatusBadge, RefreshButton } from '@/components/common';
 import { useAuthStore } from '@/store/authStore';
 
 type TicketStatus = 'open' | 'pending_user' | 'in_progress' | 'resolved' | 'closed';
@@ -118,6 +119,7 @@ function userName(u?: User | null) {
 }
 
 export default function SupportPage() {
+  const navigate = useNavigate();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [filters, setFilters] = useState<{
@@ -283,6 +285,14 @@ export default function SupportPage() {
       <PageHeader
         title="Support tickets"
         subtitle="Customer & driver support inbox with SLA tracking"
+        actions={
+          <div className="flex gap-2">
+            <RefreshButton
+              onRefresh={() => { statsQ.refetch(); listQ.refetch(); }}
+              isFetching={statsQ.isFetching || listQ.isFetching}
+            />
+          </div>
+        }
       />
 
       {/* Stats cards */}

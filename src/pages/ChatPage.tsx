@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { chatAPI } from '@/services/api';
 import { Modal } from '@/components/Modal';
-import { PageHeader, LoadingSpinner } from '@/components/common';
+import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import { Search, MessageSquare, User } from 'lucide-react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
@@ -43,6 +43,7 @@ export default function ChatPage() {
       <PageHeader
         title="Chat Support"
         subtitle="View ride chat conversations for support"
+        actions={<RefreshButton onRefresh={refetch} isFetching={isLoading} />}
       />
 
       {/* Search */}
