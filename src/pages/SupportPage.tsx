@@ -71,6 +71,7 @@ interface Ticket {
   firstResponseAt?: string;
   resolvedAt?: string;
   closedAt?: string;
+  closedByRole?: 'customer' | 'driver' | 'admin' | 'system';
   reopenCount?: number;
   createdAt: string;
   updatedAt: string;
@@ -648,17 +649,27 @@ function TicketDetail({
           {/* Sidebar */}
           <div className="space-y-3 text-sm">
             <Sidebar label="Status">
-              <select
-                value={ticket.status}
-                onChange={(e) => updateMut.mutate({ status: e.target.value })}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s.replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
+              {ticket.status === 'closed' && ticket.closedByRole === 'admin' ? (
+                <div className="space-y-1">
+                  <StatusBadge status="closed" variant={STATUS_VARIANT.closed} />
+                  <p className="text-xs text-gray-500">
+                    Closed by support — this is permanent and can't be reopened.
+                    The customer must create a new ticket.
+                  </p>
+                </div>
+              ) : (
+                <select
+                  value={ticket.status}
+                  onChange={(e) => updateMut.mutate({ status: e.target.value })}
+                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s.replace(/_/g, ' ')}
+                    </option>
+                  ))}
+                </select>
+              )}
             </Sidebar>
 
             <Sidebar label="Priority">

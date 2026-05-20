@@ -36,6 +36,10 @@ export default function InvoicesPage() {
   const [status, setStatus] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [detail, setDetail] = useState<Invoice | null>(null);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
 
   const listQ = useQuery({
     queryKey: ['invoices', page, type, status],
@@ -275,15 +279,52 @@ export default function InvoicesPage() {
               </a>
               {detail.status !== 'cancelled' && (
                 <button
-                  onClick={() => {
-                    const reason = prompt('Cancellation reason?');
-                    if (reason !== null) cancelMut.mutate({ id: detail._id, reason });
-                  }}
+                  onClick={() => { setCancelReason(''); setShowCancelModal(true); }}
                   className="flex items-center gap-1 px-3 py-2 bg-red-600 text-white rounded-lg text-sm"
                 >
                   <X className="w-4 h-4" /> Cancel
                 </button>
               )}
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {showCancelModal && detail && (
+        <Modal
+          isOpen
+          onClose={() => setShowCancelModal(false)}
+          title="Cancel Invoice"
+          size="sm"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">
+              This will mark invoice <span className="font-mono font-medium">{detail.invoiceNumber}</span> as cancelled.
+            </p>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Cancellation reason *</label>
+              <input
+                autoFocus
+                className="input w-full"
+                placeholder="Enter reason…"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button className="btn btn-secondary" onClick={() => setShowCancelModal(false)}>
+                Back
+              </button>
+              <button
+                className="btn btn-danger"
+                disabled={!cancelReason.trim() || cancelMut.isPending}
+                onClick={() => {
+                  cancelMut.mutate({ id: detail._id, reason: cancelReason });
+                  setShowCancelModal(false);
+                }}
+              >
+                {cancelMut.isPending ? 'Cancelling…' : 'Confirm Cancel'}
+              </button>
             </div>
           </div>
         </Modal>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ridesAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
@@ -17,19 +18,34 @@ import {
   UserPlus,
   KeyRound,
   Flag,
+  CalendarClock,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format, differenceInMinutes } from 'date-fns';
 import clsx from 'clsx';
 import type { Ride } from '@/types';
 
-type TabType = 'all' | 'live' | 'disputes';
+type TabType = 'all' | 'scheduled' | 'live' | 'disputes';
 
 export default function RidesPage() {
-  const [tab, setTab] = useState<TabType>('all');
+  // Honour a ?tab= deep-link (e.g. the dashboard's "Live Rides" → ?tab=live
+  // and "Disputes" → ?tab=disputes quick actions). Falls back to "all".
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabType | null;
+  const [tab, setTab] = useState<TabType>(
+    tabParam && ['all', 'scheduled', 'live', 'disputes'].includes(tabParam) ? tabParam : 'all',
+  );
   const [page, setPage] = useState(1);
+  // ── Filters (shared across tabs; each tab uses the subset that applies) ──
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [rideTypeFilter, setRideTypeFilter] = useState<string>('');
+  const [paymentFilter, setPaymentFilter] = useState<string>('');
+  const [startDate, setStartDate] = useState<string>('');
+  const [endDate, setEndDate] = useState<string>('');
+  const [minFare, setMinFare] = useState<string>('');
+  const [maxFare, setMaxFare] = useState<string>('');
   const [selectedRide, setSelectedRide] = useState<Ride | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -67,6 +83,43 @@ export default function RidesPage() {
     const t = setTimeout(() => setAssignSearchDebounced(assignSearch.trim()), 250);
     return () => clearTimeout(t);
   }, [assignSearch]);
+
+  // Debounce the free-text/number filters (search + fare range) so typing
+  // doesn't fire a request per keystroke. Discrete selects (status, type,
+  // payment, dates) are applied immediately and don't need this.
+  const [debouncedText, setDebouncedText] = useState({ search: '', minFare: '', maxFare: '' });
+  useEffect(() => {
+    const t = setTimeout(
+      () => setDebouncedText({ search: search.trim(), minFare: minFare.trim(), maxFare: maxFare.trim() }),
+      350,
+    );
+    return () => clearTimeout(t);
+  }, [search, minFare, maxFare]);
+
+  // Are any filters active? Drives the "Clear filters" affordance.
+  const hasActiveFilters =
+    !!search || !!statusFilter || !!rideTypeFilter || !!paymentFilter ||
+    !!startDate || !!endDate || !!minFare || !!maxFare;
+
+  const clearFilters = () => {
+    setSearch('');
+    setStatusFilter('');
+    setRideTypeFilter('');
+    setPaymentFilter('');
+    setStartDate('');
+    setEndDate('');
+    setMinFare('');
+    setMaxFare('');
+    setPage(1);
+  };
+
+  // Reset filters that don't apply when moving between tabs, and jump back
+  // to page 1 so the new tab starts clean.
+  const switchTab = (next: TabType) => {
+    setTab(next);
+    setPage(1);
+    clearFilters();
+  };
 
   // Nearby drivers within 7 km, filtered by the search box. Only runs when
   // the modal is open and we have a ride id — no point pre-fetching.
@@ -124,32 +177,88 @@ export default function RidesPage() {
     },
   });
 
+  // Assemble the query params from the active filters. The same shape works
+  // for the all / scheduled / disputes endpoints; `live` filters client-side.
+  const buildParams = () => {
+    const params: Record<string, any> = { page, limit: 10 };
+    if (debouncedText.search) params.search = debouncedText.search;
+    if (statusFilter) params.status = statusFilter;
+    if (rideTypeFilter) params.rideType = rideTypeFilter;
+    if (paymentFilter) params.paymentMethod = paymentFilter;
+    if (startDate) params.startDate = startDate;
+    // Stretch the end date to the end of the chosen day so the whole day is
+    // inclusive rather than cutting off at midnight.
+    if (endDate) params.endDate = `${endDate}T23:59:59.999`;
+    if (debouncedText.minFare) params.minFare = Number(debouncedText.minFare);
+    if (debouncedText.maxFare) params.maxFare = Number(debouncedText.maxFare);
+    return params;
+  };
+
   const { data, isLoading, refetch, isFetching } = useQuery({
-    queryKey: ['rides', tab, page, search, statusFilter],
+    queryKey: [
+      'rides', tab, page, debouncedText, statusFilter, rideTypeFilter,
+      paymentFilter, startDate, endDate,
+    ],
     queryFn: async () => {
-      const params: any = { page, limit: 10 };
-      if (search) params.search = search;
-      
+      const params = buildParams();
+
       if (tab === 'live') {
+        // Live returns the full active set; filtering is applied client-side
+        // (see `liveRides` below) so the 10s auto-refresh stays cheap.
         const res = await ridesAPI.getLive();
         return { data: res.data.data?.rides ?? [], pagination: null };
-      } else if (tab === 'disputes') {
-        if (statusFilter) params.status = statusFilter;
-        const res = await ridesAPI.getDisputes(params);
-        return {
-          data: res.data?.data?.rides ?? [],
-          pagination: res.data?.data?.pagination ?? null,
-        };
-      } else {
-        if (statusFilter) params.status = statusFilter;
-        const res = await ridesAPI.getAll(params);
+      }
+      if (tab === 'scheduled') {
+        const res = await ridesAPI.getScheduled(params);
         return {
           data: res.data?.data?.rides ?? [],
           pagination: res.data?.data?.pagination ?? null,
         };
       }
+      if (tab === 'disputes') {
+        const res = await ridesAPI.getDisputes(params);
+        return {
+          data: res.data?.data?.rides ?? [],
+          pagination: res.data?.data?.pagination ?? null,
+        };
+      }
+      const res = await ridesAPI.getAll(params);
+      return {
+        data: res.data?.data?.rides ?? [],
+        pagination: res.data?.data?.pagination ?? null,
+      };
     },
     refetchInterval: tab === 'live' ? 10000 : false,
+  });
+
+  // Client-side filtering for the Live tab — the endpoint has no query
+  // params, so we apply the same filters to the fetched active rides.
+  const matchesCategory = (ride: Ride) => {
+    if (!rideTypeFilter) return true;
+    if (rideTypeFilter === 'scheduled') return !!ride.isScheduled;
+    if (rideTypeFilter === 'private') return ride.rideType === 'private';
+    if (rideTypeFilter === 'instant') return !ride.isScheduled && ride.rideType !== 'private';
+    return ride.rideType === rideTypeFilter;
+  };
+  const liveRides: Ride[] = (data?.data || []).filter((ride: Ride) => {
+    if (tab !== 'live') return true;
+    if (statusFilter && ride.status !== statusFilter) return false;
+    if (paymentFilter && ride.paymentMethod !== paymentFilter) return false;
+    if (!matchesCategory(ride)) return false;
+    const fare = ride.actualFare ?? ride.estimatedFare ?? 0;
+    if (debouncedText.minFare && fare < Number(debouncedText.minFare)) return false;
+    if (debouncedText.maxFare && fare > Number(debouncedText.maxFare)) return false;
+    if (debouncedText.search) {
+      const q = debouncedText.search.toLowerCase();
+      const hay = [
+        ride._id,
+        ride.customer?.firstName, ride.customer?.lastName, ride.customer?.phone,
+        ride.driver?.firstName, ride.driver?.lastName, ride.driver?.phone,
+        ride.pickup?.address, ride.dropoff?.address,
+      ].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
   });
 
   const cancelMutation = useMutation({
@@ -237,6 +346,12 @@ export default function RidesPage() {
           <div className="text-sm text-gray-500">
             {format(new Date(ride.createdAt), 'MMM d, yyyy HH:mm')}
           </div>
+          {ride.isScheduled && ride.scheduledAt && (
+            <div className="flex items-center gap-1 text-xs text-blue-600 mt-0.5">
+              <CalendarClock className="w-3 h-3" />
+              Departs {format(new Date(ride.scheduledAt), 'MMM d, HH:mm')}
+            </div>
+          )}
           <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
             ride.isScheduled
               ? 'bg-blue-100 text-blue-700'
@@ -439,21 +554,18 @@ export default function RidesPage() {
       />
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-gray-200">
+      <div className="flex gap-2 mb-6 border-b border-gray-200 overflow-x-auto">
         {[
           { key: 'all', label: 'All Rides', icon: MapPin },
+          { key: 'scheduled', label: 'Scheduled', icon: CalendarClock },
           { key: 'live', label: 'Live Tracking', icon: Navigation },
           { key: 'disputes', label: 'Disputes', icon: AlertTriangle },
         ].map(({ key, label, icon: Icon }) => (
           <button
             key={key}
-            onClick={() => {
-              setTab(key as TabType);
-              setPage(1);
-              setStatusFilter('');
-            }}
+            onClick={() => switchTab(key as TabType)}
             className={clsx(
-              'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
+              'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap',
               tab === key
                 ? 'border-primary-500 text-primary-600'
                 : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -465,10 +577,12 @@ export default function RidesPage() {
         ))}
       </div>
 
-      {/* Filters */}
-      {tab !== 'live' && (
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="relative flex-1">
+      {/* Filters — shared across every tab. The Live tab applies them
+          client-side; the others pass them through to the API. */}
+      <div className="mb-6 space-y-3">
+        <div className="flex flex-col lg:flex-row gap-3">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
@@ -481,19 +595,39 @@ export default function RidesPage() {
               className="input pl-10"
             />
           </div>
+
+          {/* Status — options adapt to the active tab */}
           <select
             value={statusFilter}
             onChange={(e) => {
               setStatusFilter(e.target.value);
               setPage(1);
             }}
-            className="input w-full sm:w-40"
+            className="input w-full lg:w-44"
+            title="Filter by status"
           >
             <option value="">All Status</option>
             {tab === 'disputes' ? (
               <>
                 <option value="open">Open</option>
                 <option value="resolved">Resolved</option>
+              </>
+            ) : tab === 'live' ? (
+              <>
+                <option value="searching">Searching</option>
+                <option value="driver_assigned">Driver Assigned</option>
+                <option value="driver_arriving">Driver Arriving</option>
+                <option value="driver_arrived">Driver Arrived</option>
+                <option value="in_progress">In Progress</option>
+              </>
+            ) : tab === 'scheduled' ? (
+              <>
+                <option value="reserved">Reserved (Shuttle)</option>
+                <option value="searching">Searching</option>
+                <option value="driver_assigned">Driver Assigned</option>
+                <option value="in_progress">In Progress</option>
+                <option value="completed">Completed</option>
+                <option value="cancelled">Cancelled</option>
               </>
             ) : (
               <>
@@ -507,13 +641,112 @@ export default function RidesPage() {
               </>
             )}
           </select>
+
+          {/* Ride type category */}
+          <select
+            value={rideTypeFilter}
+            onChange={(e) => {
+              setRideTypeFilter(e.target.value);
+              setPage(1);
+            }}
+            className="input w-full lg:w-40"
+            title="Filter by ride type"
+          >
+            <option value="">All Types</option>
+            <option value="instant">Instant</option>
+            <option value="private">Private</option>
+            <option value="scheduled">Scheduled</option>
+          </select>
+
+          {/* Payment method */}
+          <select
+            value={paymentFilter}
+            onChange={(e) => {
+              setPaymentFilter(e.target.value);
+              setPage(1);
+            }}
+            className="input w-full lg:w-40"
+            title="Filter by payment method"
+          >
+            <option value="">All Payments</option>
+            <option value="cash">Cash</option>
+            <option value="card">Card</option>
+            <option value="wallet">Wallet</option>
+          </select>
         </div>
-      )}
+
+        <div className="flex flex-col sm:flex-row flex-wrap gap-3 sm:items-center">
+          {/* Date range — filters the scheduled departure on the Scheduled
+              tab, otherwise the booking-created date. */}
+          <div className="flex items-center gap-2">
+            <CalendarClock className="w-4 h-4 text-gray-400 shrink-0" />
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => {
+                setStartDate(e.target.value);
+                setPage(1);
+              }}
+              className="input w-full sm:w-40"
+              title={tab === 'scheduled' ? 'Departure from' : 'From date'}
+            />
+            <span className="text-gray-400">–</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => {
+                setEndDate(e.target.value);
+                setPage(1);
+              }}
+              className="input w-full sm:w-40"
+              title={tab === 'scheduled' ? 'Departure to' : 'To date'}
+            />
+          </div>
+
+          {/* Fare range */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-gray-500 shrink-0">₹</span>
+            <input
+              type="number"
+              placeholder="Min fare"
+              value={minFare}
+              onChange={(e) => {
+                setMinFare(e.target.value);
+                setPage(1);
+              }}
+              className="input w-28"
+              min={0}
+            />
+            <span className="text-gray-400">–</span>
+            <input
+              type="number"
+              placeholder="Max fare"
+              value={maxFare}
+              onChange={(e) => {
+                setMaxFare(e.target.value);
+                setPage(1);
+              }}
+              className="input w-28"
+              min={0}
+            />
+          </div>
+
+          {hasActiveFilters && (
+            <button
+              onClick={clearFilters}
+              className="btn btn-secondary inline-flex items-center gap-1.5 text-sm"
+            >
+              <X className="w-4 h-4" />
+              Clear filters
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Live Tracking View */}
       {tab === 'live' && !isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-          {(data?.data || []).map((ride: Ride) => (
+          {liveRides.map((ride: Ride) => (
             <div
               key={ride._id}
               className={clsx(
@@ -545,9 +778,11 @@ export default function RidesPage() {
               </div>
             </div>
           ))}
-          {(data?.data || []).length === 0 && (
+          {liveRides.length === 0 && (
             <div className="col-span-full text-center py-12 text-gray-500">
-              No active rides at the moment
+              {hasActiveFilters
+                ? 'No active rides match the current filters'
+                : 'No active rides at the moment'}
             </div>
           )}
         </div>

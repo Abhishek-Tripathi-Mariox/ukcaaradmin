@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { notificationsAPI } from '@/services/api';
-import { PageHeader, RefreshButton } from '@/components/common';
+import { notificationsAPI, usersAPI } from '@/services/api';
+import { PageHeader, RefreshButton, LoadingSpinner } from '@/components/common';
 import { Pagination } from '@/components/DataTable';
-import { Bell, Send, Users, Car, Globe, History, Search } from 'lucide-react';
+import { Bell, Send, Users, Car, Globe, History, Search, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
 
@@ -19,6 +19,15 @@ interface SentNotification {
   readCount: number;
 }
 
+interface NotifUser {
+  _id: string;
+  firstName?: string;
+  lastName?: string;
+  phone: string;
+  email?: string;
+  role: 'customer' | 'driver' | 'admin';
+}
+
 export default function NotificationsPage() {
   const queryClient = useQueryClient();
   const [tab, setTab] = useState<TabType>('broadcast');
@@ -30,9 +39,35 @@ export default function NotificationsPage() {
     targetRole: 'all' as 'all' | 'customers' | 'drivers',
   });
   const [individualData, setIndividualData] = useState({
-    userId: '',
+    phone: '',
+    role: 'customer' as 'customer' | 'driver',
     title: '',
     body: '',
+  });
+  // The exact user picked from the search results. A notification can only be
+  // sent once a user is selected.
+  const [selectedUser, setSelectedUser] = useState<NotifUser | null>(null);
+
+  // Debounce the phone search so we don't query on every keystroke.
+  const [debouncedPhone, setDebouncedPhone] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedPhone(individualData.phone.trim()), 350);
+    return () => clearTimeout(t);
+  }, [individualData.phone]);
+
+  // Search users by mobile number, scoped to the chosen type (customer/driver).
+  // Only runs once enough digits are entered to be meaningful.
+  const userSearch = useQuery({
+    queryKey: ['notify-user-search', debouncedPhone, individualData.role],
+    queryFn: async () => {
+      const res = await usersAPI.getAll({
+        search: debouncedPhone,
+        role: individualData.role,
+        limit: 10,
+      });
+      return (res.data?.data?.users ?? []) as NotifUser[];
+    },
+    enabled: tab === 'individual' && debouncedPhone.replace(/\D/g, '').length >= 3,
   });
 
   const broadcastMutation = useMutation({
@@ -51,10 +86,12 @@ export default function NotificationsPage() {
       notificationsAPI.sendToUser(data.userId, data.title, data.body),
     onSuccess: () => {
       toast.success('Notification sent successfully');
-      setIndividualData({ userId: '', title: '', body: '' });
+      setIndividualData({ phone: '', role: 'customer', title: '', body: '' });
+      setSelectedUser(null);
       queryClient.invalidateQueries({ queryKey: ['notifications', 'sent'] });
     },
-    onError: () => toast.error('Failed to send notification'),
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message || 'Failed to send notification'),
   });
 
   const sentQuery = useQuery({
@@ -213,19 +250,102 @@ export default function NotificationsPage() {
           </div>
 
           <div className="space-y-6">
-            {/* User ID */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                User ID *
-              </label>
-              <input
-                type="text"
-                value={individualData.userId}
-                onChange={(e) => setIndividualData({ ...individualData, userId: e.target.value })}
-                className="input"
-                placeholder="Enter user ID..."
-              />
+            {/* Recipient — search by mobile number + type, then pick the user */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mobile Number *
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input
+                    type="tel"
+                    value={individualData.phone}
+                    onChange={(e) => {
+                      setIndividualData({ ...individualData, phone: e.target.value });
+                      setSelectedUser(null);
+                    }}
+                    className="input pl-9"
+                    placeholder="Search by mobile number..."
+                  />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Country code optional — we match the trailing digits.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Type *
+                </label>
+                <select
+                  value={individualData.role}
+                  onChange={(e) => {
+                    setIndividualData({ ...individualData, role: e.target.value as 'customer' | 'driver' });
+                    setSelectedUser(null);
+                  }}
+                  className="input"
+                >
+                  <option value="customer">Customer</option>
+                  <option value="driver">Driver</option>
+                </select>
+              </div>
             </div>
+
+            {/* Search results / selected recipient */}
+            {selectedUser ? (
+              <div className="flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 p-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                    <Check className="w-5 h-5 text-green-600" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium text-gray-900 truncate">
+                      {[selectedUser.firstName, selectedUser.lastName].filter(Boolean).join(' ') || 'User'}
+                    </div>
+                    <div className="text-sm text-gray-500 truncate">
+                      {selectedUser.phone} · <span className="capitalize">{selectedUser.role}</span>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="p-2 hover:bg-green-100 rounded-lg shrink-0"
+                  title="Change recipient"
+                >
+                  <X className="w-4 h-4 text-gray-500" />
+                </button>
+              </div>
+            ) : (
+              debouncedPhone.replace(/\D/g, '').length >= 3 && (
+                <div className="rounded-lg border border-gray-200 divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                  {userSearch.isLoading ? (
+                    <div className="p-6 flex justify-center">
+                      <LoadingSpinner />
+                    </div>
+                  ) : (userSearch.data?.length ?? 0) === 0 ? (
+                    <div className="p-6 text-center text-sm text-gray-500">
+                      No {individualData.role} found with that mobile number.
+                    </div>
+                  ) : (
+                    userSearch.data!.map((u) => (
+                      <button
+                        key={u._id}
+                        onClick={() => setSelectedUser(u)}
+                        className="w-full flex items-center justify-between gap-3 p-3 text-left hover:bg-blue-50 transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="font-medium text-gray-900 truncate">
+                            {[u.firstName, u.lastName].filter(Boolean).join(' ') || 'User'}
+                          </div>
+                          <div className="text-sm text-gray-500 truncate">{u.phone}</div>
+                        </div>
+                        <span className="text-xs text-gray-400 capitalize shrink-0">{u.role}</span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              )
+            )}
 
             {/* Title */}
             <div>
@@ -262,13 +382,17 @@ export default function NotificationsPage() {
 
             <button
               onClick={() => {
-                if (individualData.userId && individualData.title && individualData.body) {
-                  sendToUserMutation.mutate(individualData);
+                if (selectedUser && individualData.title && individualData.body) {
+                  sendToUserMutation.mutate({
+                    userId: selectedUser._id,
+                    title: individualData.title,
+                    body: individualData.body,
+                  });
                 }
               }}
               className="btn btn-primary w-full"
               disabled={
-                !individualData.userId ||
+                !selectedUser ||
                 !individualData.title ||
                 !individualData.body ||
                 sendToUserMutation.isPending

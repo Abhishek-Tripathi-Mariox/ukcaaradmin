@@ -96,12 +96,19 @@ export const usersAPI = {
   delete: (id: string) => api.delete(`/admin/users/${id}`),
 };
 
+export const referralsAPI = {
+  getAll: (params?: { page?: number; limit?: number; search?: string }) =>
+    api.get('/admin/referrals', { params }),
+
+  getById: (userId: string) => api.get(`/admin/referrals/${userId}`),
+};
+
 // ════════════════════════════════════════════════════════════════════
 // DRIVERS API
 // ════════════════════════════════════════════════════════════════════
 
 export const driversAPI = {
-  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; isOnline?: boolean; isOnePass?: boolean; minRating?: number; isVerified?: boolean }) =>
+  getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; isOnline?: boolean; isOnePass?: boolean; minRating?: number; isVerified?: boolean; isActive?: boolean; serviceType?: string }) =>
     api.get('/admin/drivers', { params }),
 
   getById: (id: string) => api.get(`/admin/drivers/${id}`),
@@ -161,12 +168,30 @@ export const onePassAPI = {
 // RIDES API
 // ════════════════════════════════════════════════════════════════════
 
+export interface RideListParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  rideType?: string;
+  paymentMethod?: string;
+  startDate?: string;
+  endDate?: string;
+  minFare?: number;
+  maxFare?: number;
+}
+
 export const ridesAPI = {
-  getAll: (params?: { page?: number; limit?: number; status?: string; startDate?: string; endDate?: string }) =>
-    api.get('/admin/rides', { params }),
-  
+  getAll: (params?: RideListParams) => api.get('/admin/rides', { params }),
+
+  // Dedicated scheduled view — merges pre-booked rides + shuttle bookings.
+  // Accepts the same filter set as getAll; date range matches the scheduled
+  // departure rather than the booking-created time.
+  getScheduled: (params?: RideListParams) =>
+    api.get('/admin/rides/scheduled', { params }),
+
   getById: (id: string) => api.get(`/admin/rides/${id}`),
-  
+
   getLive: () => api.get('/admin/rides/live'),
   
   getHeatmap: (params?: { startDate?: string; endDate?: string }) =>
@@ -218,7 +243,7 @@ export const ridesAPI = {
   adjustFare: (id: string, newFare: number, reason: string) =>
     api.patch(`/admin/rides/${id}/fare`, { newFare, reason }),
   
-  getDisputes: (params?: { page?: number; limit?: number; status?: string }) =>
+  getDisputes: (params?: RideListParams) =>
     api.get('/admin/rides/disputes', { params }),
   
   resolveDispute: (rideId: string, resolution: string, refundAmount?: number, notes?: string) =>
@@ -332,6 +357,8 @@ export const notificationsAPI = {
     return api.post('/admin/broadcast', payload);
   },
 
+  // Send to a single user resolved via the search-and-select flow (the admin
+  // searches by mobile number + type, then picks the exact user).
   sendToUser: (userId: string, title: string, body: string) =>
     api.post(`/admin/notify/${userId}`, { title, message: body }),
 
@@ -641,6 +668,8 @@ export const routesAPI = {
   create: (data: any) => api.post('/admin/routes', data),
   update: (id: string, data: any) => api.patch(`/admin/routes/${id}`, data),
   remove: (id: string) => api.delete(`/admin/routes/${id}`),
+  addDriver: (id: string, driverId: string, data?: { status?: string; note?: string }) =>
+    api.post(`/admin/routes/${id}/drivers`, { driverId, ...data }),
   updateDriver: (id: string, driverId: string, data: { status: string; note?: string }) =>
     api.patch(`/admin/routes/${id}/drivers/${driverId}`, data),
   removeDriver: (id: string, driverId: string) =>
@@ -745,6 +774,62 @@ export const fuelTypesAPI = {
   update: (id: string, data: Partial<CatalogueType>) =>
     api.put(`/admin/fuel-types/${id}`, data),
   remove: (id: string) => api.delete(`/admin/fuel-types/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════
+// FAQs (admin-managed help content for customer + driver apps)
+// ════════════════════════════════════════════════════════════════════
+
+export type FaqAudience = 'user' | 'driver' | 'both';
+
+export interface Faq {
+  _id: string;
+  question: string;
+  answer: string;
+  audience: FaqAudience;
+  isActive: boolean;
+  order: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const faqsAPI = {
+  list: (params?: { audience?: FaqAudience; isActive?: boolean; search?: string }) =>
+    api.get('/admin/faqs', { params }),
+  create: (data: Partial<Faq>) => api.post('/admin/faqs', data),
+  update: (id: string, data: Partial<Faq>) => api.put(`/admin/faqs/${id}`, data),
+  remove: (id: string) => api.delete(`/admin/faqs/${id}`),
+};
+
+// ════════════════════════════════════════════════════════════════════
+// SUBSCRIPTIONS API
+// ════════════════════════════════════════════════════════════════════
+
+export const subscriptionsAPI = {
+  // Plans CRUD
+  getPlans: (params?: { target?: 'driver' | 'customer'; type?: string; isActive?: boolean }) =>
+    api.get('/admin/subscription-plans', { params }),
+  createPlan: (data: any) => api.post('/admin/subscription-plans', data),
+  updatePlan: (id: string, data: any) => api.patch(`/admin/subscription-plans/${id}`, data),
+  deletePlan: (id: string) => api.delete(`/admin/subscription-plans/${id}`),
+  togglePlan: (id: string, isActive: boolean) =>
+    api.patch(`/admin/subscription-plans/${id}/toggle`, { isActive }),
+
+  // Subscribers
+  getSubscribers: (params?: Record<string, string | number>) =>
+    api.get('/admin/subscriptions', { params }),
+  getSubscriber: (id: string) => api.get(`/admin/subscriptions/${id}`),
+  grantSubscription: (data: { userId: string; userType: string; planId: string; reason?: string }) =>
+    api.post('/admin/subscriptions/grant', data),
+  cancelSubscription: (id: string, reason: string) =>
+    api.post(`/admin/subscriptions/${id}/cancel`, { reason }),
+  extendSubscription: (id: string, days: number) =>
+    api.post(`/admin/subscriptions/${id}/extend`, { days }),
+
+  // Stats & Revenue
+  getStats: () => api.get('/admin/subscriptions/stats'),
+  getRevenue: (params?: { startDate?: string; endDate?: string }) =>
+    api.get('/admin/subscriptions/revenue', { params }),
 };
 
 export default api;
