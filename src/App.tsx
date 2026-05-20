@@ -35,7 +35,10 @@ const ZonesPage = lazy(() => import('@/pages/ZonesPage'));
 const RoutesPage = lazy(() => import('@/pages/RoutesPage'));
 const NotificationTemplatesPage = lazy(() => import('@/pages/NotificationTemplatesPage'));
 const VehicleTypesPage = lazy(() => import('@/pages/VehicleTypesPage'));
+const FaqsPage = lazy(() => import('@/pages/FaqsPage'));
 const FareCalculationPage = lazy(() => import('@/pages/FareCalculationPage'));
+const SubscriptionsPage = lazy(() => import('@/pages/SubscriptionsPage'));
+const ReferralsPage = lazy(() => import('@/pages/ReferralsPage'));
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -156,6 +159,14 @@ function AppRoutes() {
         >
           <Route index element={<DashboardPage />} />
           <Route path="users" element={<UsersPage />} />
+          <Route
+            path="referrals"
+            element={
+              <PermissionGuard permission="view_referrals">
+                <ReferralsPage />
+              </PermissionGuard>
+            }
+          />
           <Route path="drivers" element={<DriversPage />} />
           <Route path="rides" element={<RidesPage />} />
           <Route
@@ -256,10 +267,26 @@ function AppRoutes() {
             }
           />
           <Route
+            path="faqs"
+            element={
+              <PermissionGuard permission="view_faqs">
+                <FaqsPage />
+              </PermissionGuard>
+            }
+          />
+          <Route
             path="fare-calculation"
             element={
               <PermissionGuard permission="view_settings">
                 <FareCalculationPage />
+              </PermissionGuard>
+            }
+          />
+          <Route
+            path="subscriptions"
+            element={
+              <PermissionGuard permission="view_payments">
+                <SubscriptionsPage />
               </PermissionGuard>
             }
           />

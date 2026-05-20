@@ -11,7 +11,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { incentivesAPI } from '@/services/api';
-import { Modal } from '@/components/Modal';
+import { Modal, ConfirmModal } from '@/components/Modal';
 import {
   PageHeader,
   StatusBadge,
@@ -69,6 +69,7 @@ export default function IncentivesPage() {
   const [filterActive, setFilterActive] = useState<string>('');
   const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Incentive | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Incentive | null>(null);
 
   const rulesQ = useQuery({
     queryKey: ['incentives', filterActive],
@@ -126,16 +127,7 @@ export default function IncentivesPage() {
             setEditing(r);
             setCreateOpen(true);
           }}
-          onDelete={async (r) => {
-            if (!confirm(`Delete "${r.name}"?`)) return;
-            try {
-              await incentivesAPI.remove(r._id);
-              toast.success('Deleted');
-              qc.invalidateQueries({ queryKey: ['incentives'] });
-            } catch (e: any) {
-              toast.error(e.response?.data?.message || 'Failed');
-            }
-          }}
+          onDelete={(r) => setDeleteTarget(r)}
         />
       )}
 
@@ -156,6 +148,27 @@ export default function IncentivesPage() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await incentivesAPI.remove(deleteTarget._id);
+            toast.success('Deleted');
+            qc.invalidateQueries({ queryKey: ['incentives'] });
+          } catch (e: any) {
+            toast.error(e.response?.data?.message || 'Failed');
+          } finally {
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Incentive"
+        message={`Delete "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

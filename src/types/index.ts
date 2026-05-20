@@ -14,6 +14,9 @@ export interface User {
 }
 
 export interface DriverProfile {
+  /** Driver's chosen primary service category: instant / private / scheduled. */
+  serviceType?: 'instant' | 'private' | 'scheduled';
+
   // Vehicle (matches backend User.driverProfile)
   vehicleMake?: string;
   vehicleModel?: string;

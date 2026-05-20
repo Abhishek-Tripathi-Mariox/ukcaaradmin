@@ -26,6 +26,7 @@ export const PERMISSIONS = {
   MANAGE_INVOICES: 'manage_invoices',
   VIEW_PROMOS: 'view_promos',
   MANAGE_PROMOS: 'manage_promos',
+  VIEW_REFERRALS: 'view_referrals',
   VIEW_ONEPASS: 'view_onepass',
   MANAGE_ONEPASS: 'manage_onepass',
   VIEW_CHATS: 'view_chats',
@@ -45,10 +46,14 @@ export const PERMISSIONS = {
   MANAGE_ROUTES: 'manage_routes',
   VIEW_NOTIFICATION_TEMPLATES: 'view_notification_templates',
   MANAGE_NOTIFICATION_TEMPLATES: 'manage_notification_templates',
+  VIEW_FAQS: 'view_faqs',
+  MANAGE_FAQS: 'manage_faqs',
   VIEW_SETTINGS: 'view_settings',
   MANAGE_SETTINGS: 'manage_settings',
   MANAGE_ADMINS: 'manage_admins',
   VIEW_AUDIT_LOG: 'view_audit_log',
+  VIEW_SUBSCRIPTIONS: 'view_subscriptions',
+  MANAGE_SUBSCRIPTIONS: 'manage_subscriptions',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

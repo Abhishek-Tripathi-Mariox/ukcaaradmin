@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { routesAPI } from '@/services/api';
+import { useEffect, useMemo, useState } from 'react';
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
+import { routesAPI, driversAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import { PlaceSearchInput } from '@/components/PlaceSearchInput';
-import { Plus, Pencil, Trash2, MapPin, Users, UserCog } from 'lucide-react';
+import { Plus, Pencil, Trash2, MapPin, Users, UserCog, Search, UserPlus, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 type RouteType = 'private' | 'scheduled';
@@ -1009,9 +1009,26 @@ function ManageRouteModal({
   const [tab, setTab] = useState<'drivers' | 'users'>('drivers');
   const [userIdInput, setUserIdInput] = useState('');
 
+  // Driver picker — search the global driver pool to assign someone to this
+  // route. Debounced so we don't fire a request on every keystroke.
+  const [driverSearch, setDriverSearch] = useState('');
+  const [driverSearchDebounced, setDriverSearchDebounced] = useState('');
+  useEffect(() => {
+    const t = setTimeout(() => setDriverSearchDebounced(driverSearch.trim()), 300);
+    return () => clearTimeout(t);
+  }, [driverSearch]);
+
   const { data: full, isLoading } = useQuery({
     queryKey: ['route', route._id],
     queryFn: async () => (await routesAPI.get(route._id)).data?.data?.route,
+  });
+
+  const { data: driverSearchData, isFetching: driverSearchLoading } = useQuery({
+    queryKey: ['route-driver-search', route._id, driverSearchDebounced],
+    queryFn: async () =>
+      (await driversAPI.getAll({ search: driverSearchDebounced, limit: 10 })).data?.data,
+    enabled: tab === 'drivers' && driverSearchDebounced.length > 0,
+    placeholderData: keepPreviousData,
   });
 
   const refetchAll = () => {
@@ -1046,6 +1063,18 @@ function ManageRouteModal({
       toast.error(e?.response?.data?.message || 'Remove failed'),
   });
 
+  const assignDriverMut = useMutation({
+    mutationFn: (driverId: string) => routesAPI.addDriver(route._id, driverId),
+    onSuccess: () => {
+      toast.success('Driver assigned to route');
+      setDriverSearch('');
+      setDriverSearchDebounced('');
+      refetchAll();
+    },
+    onError: (e: any) =>
+      toast.error(e?.response?.data?.message || 'Assign failed'),
+  });
+
   const assignMut = useMutation({
     mutationFn: (uid: string) => routesAPI.assignUser(route._id, uid),
     onSuccess: () => {
@@ -1070,6 +1099,17 @@ function ManageRouteModal({
   const drivers = full?.registeredDrivers ?? [];
   const users = full?.assignedUsers ?? [];
   const showUsersTab = (full?.type ?? route.type) === 'private';
+
+  // Drivers already on this route — used to disable them in the picker so
+  // the admin can't add a duplicate (they still show up, just greyed out).
+  const registeredDriverIds = useMemo(
+    () =>
+      new Set(
+        drivers.map((d: any) => String(d.driver?._id || d.driver)),
+      ),
+    [drivers],
+  );
+  const driverResults: any[] = driverSearchData?.drivers ?? [];
 
   return (
     <Modal
@@ -1110,7 +1150,82 @@ function ManageRouteModal({
       {isLoading ? (
         <LoadingSpinner />
       ) : tab === 'drivers' ? (
-        <div className="space-y-2 max-h-[60vh] overflow-y-auto">
+        <div className="space-y-4">
+          {/* Assign a driver — search the global driver pool. Drivers already
+              on this route appear but are disabled so they can't be added
+              twice; manage them in the list below instead. */}
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">
+              Assign a driver
+            </label>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                className="input pl-9 w-full"
+                placeholder="Search drivers by name or phone…"
+                value={driverSearch}
+                onChange={(e) => setDriverSearch(e.target.value)}
+              />
+            </div>
+            {driverSearchDebounced.length > 0 && (
+              <div className="mt-2 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-60 overflow-y-auto">
+                {driverSearchLoading && driverResults.length === 0 ? (
+                  <div className="p-4 text-center">
+                    <LoadingSpinner />
+                  </div>
+                ) : driverResults.length === 0 ? (
+                  <div className="p-4 text-center text-sm text-gray-500">
+                    No drivers match "{driverSearchDebounced}".
+                  </div>
+                ) : (
+                  driverResults.map((d: any) => {
+                    const alreadyOnRoute = registeredDriverIds.has(String(d._id));
+                    const fullName =
+                      d.firstName || d.lastName
+                        ? `${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()
+                        : 'Driver';
+                    return (
+                      <div
+                        key={d._id}
+                        className="flex items-center justify-between gap-3 p-2.5"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900 truncate">
+                            {fullName}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate">
+                            {d.phone || d.email || ''}
+                            {d.driverProfile?.plateNumber
+                              ? `  •  ${d.driverProfile.plateNumber}`
+                              : ''}
+                          </div>
+                        </div>
+                        {alreadyOnRoute ? (
+                          <span className="shrink-0 inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1">
+                            <Check size={13} /> On route
+                          </span>
+                        ) : (
+                          <button
+                            className="btn-primary text-xs inline-flex items-center gap-1 shrink-0 px-3 py-1.5"
+                            disabled={assignDriverMut.isPending}
+                            onClick={() => assignDriverMut.mutate(String(d._id))}
+                          >
+                            <UserPlus size={13} /> Assign
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="border-t pt-3">
+            <h4 className="text-xs font-semibold uppercase text-gray-500 mb-2">
+              On this route ({drivers.length})
+            </h4>
+            <div className="space-y-2 max-h-[45vh] overflow-y-auto">
           {drivers.length === 0 && (
             <div className="text-sm text-gray-500 text-center py-6">
               No drivers have registered for this route yet.
@@ -1170,6 +1285,8 @@ function ManageRouteModal({
               </div>
             );
           })}
+            </div>
+          </div>
         </div>
       ) : (
         <div className="space-y-3">

@@ -7,7 +7,14 @@ import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
+// Pricing model: distance-based (per-km) or a flat subscription fare per ride
+// (used for two/three-wheelers — bike/auto). For subscription the rider always
+// pays `flatFare` regardless of distance/time.
+type PricingModel = 'per_km' | 'subscription';
+
 interface VehicleFareConfig {
+  pricingModel: PricingModel;
+  flatFare: number;  // flat fare per ride when pricingModel === 'subscription'
   base: number;      // base fare (flat charge at trip start)
   perKm: number;     // rate per kilometre
   perMin: number;    // rate per minute
@@ -23,6 +30,8 @@ interface FareSettings {
 }
 
 const DEFAULT_CONFIG: VehicleFareConfig = {
+  pricingModel: 'per_km',
+  flatFare: 0,
   base: 30,
   perKm: 12,
   perMin: 1.5,
@@ -33,6 +42,7 @@ const DEFAULT_CONFIG: VehicleFareConfig = {
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 function calcFare(cfg: VehicleFareConfig, km: number, minutes: number): number {
+  if (cfg.pricingModel === 'subscription') return cfg.flatFare;
   const raw = cfg.base + cfg.perKm * km + cfg.perMin * minutes;
   return Math.max(cfg.minFare, raw) * cfg.surgeMultiplier;
 }
@@ -120,11 +130,39 @@ function VehicleCard({
 
       {open && (
         <div className="px-5 pb-5 space-y-3 border-t border-gray-100 pt-4">
-          <FareRow label="Base Fare" field="base" value={config.base} onChange={handleField} prefix="₹" />
-          <FareRow label="Per Km" field="perKm" value={config.perKm} onChange={handleField} prefix="₹" />
-          <FareRow label="Per Minute" field="perMin" value={config.perMin} onChange={handleField} prefix="₹" step={0.1} />
-          <FareRow label="Minimum Fare" field="minFare" value={config.minFare} onChange={handleField} prefix="₹" />
-          <FareRow label="Surge Multiplier" field="surgeMultiplier" value={config.surgeMultiplier} onChange={handleField} step={0.1} />
+          {/* Pricing model selector — per-km (distance based) vs subscription
+              (flat fare per ride, for two/three-wheelers). */}
+          <div className="flex items-center gap-3">
+            <label className="w-36 text-sm text-gray-600 shrink-0">Pricing Model</label>
+            <select
+              value={config.pricingModel}
+              onChange={(e) =>
+                onChange(code, { ...config, pricingModel: e.target.value as PricingModel })
+              }
+              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            >
+              <option value="per_km">Per-km (distance based)</option>
+              <option value="subscription">Subscription (flat fare per ride)</option>
+            </select>
+          </div>
+
+          {config.pricingModel === 'subscription' ? (
+            <>
+              <FareRow label="Flat Fare" field="flatFare" value={config.flatFare} onChange={handleField} prefix="₹" />
+              <p className="text-xs text-gray-400">
+                Riders pay this fixed amount per ride regardless of distance or
+                time. Surge does not apply.
+              </p>
+            </>
+          ) : (
+            <>
+              <FareRow label="Base Fare" field="base" value={config.base} onChange={handleField} prefix="₹" />
+              <FareRow label="Per Km" field="perKm" value={config.perKm} onChange={handleField} prefix="₹" />
+              <FareRow label="Per Minute" field="perMin" value={config.perMin} onChange={handleField} prefix="₹" step={0.1} />
+              <FareRow label="Minimum Fare" field="minFare" value={config.minFare} onChange={handleField} prefix="₹" />
+              <FareRow label="Surge Multiplier" field="surgeMultiplier" value={config.surgeMultiplier} onChange={handleField} step={0.1} />
+            </>
+          )}
         </div>
       )}
     </div>
@@ -190,13 +228,21 @@ function FareCalculator({
         )}
         {entries.map(({ name, code, cfg }) => {
           const fare = calcFare(cfg, km, minutes);
+          const isSub = cfg.pricingModel === 'subscription';
           return (
             <div
               key={code}
               className="flex items-center justify-between py-2 px-3 rounded-lg bg-gray-50"
             >
               <div>
-                <div className="text-sm font-medium text-gray-800">{name}</div>
+                <div className="text-sm font-medium text-gray-800 flex items-center gap-1.5">
+                  {name}
+                  {isSub && (
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-blue-700 bg-blue-100 rounded px-1.5 py-0.5">
+                      Flat
+                    </span>
+                  )}
+                </div>
                 <div className="text-xs text-gray-400">{code}</div>
               </div>
               <div className="text-base font-bold text-primary-600">
@@ -241,10 +287,20 @@ export default function FareCalculationPage() {
 
   // Local state mirrors the saved config so the user can edit freely before saving.
   const [localConfig, setLocalConfig] = useState<Record<string, VehicleFareConfig> | null>(null);
+  // Platform commission (stored/displayed as a percentage) and cancellation fee.
+  // `null` means "not edited yet — show the saved value". Wired to editable
+  // inputs and included in the save payload (this is what was previously
+  // read-only and silently dropped on save).
+  const [commissionPct, setCommissionPct] = useState<number | null>(null);
+  const [cancellationFee, setCancellationFee] = useState<number | null>(null);
 
   // Sync remote → local whenever fareData arrives (and local hasn't been touched yet).
   const baseFares = fareData?.baseFares ?? {};
   const effectiveConfig: Record<string, VehicleFareConfig> = localConfig ?? buildInitialConfig(vehicleTypes, baseFares);
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const effectiveCommissionPct =
+    commissionPct ?? round2((fareData?.commission ?? 0.2) * 100);
+  const effectiveCancellationFee = cancellationFee ?? (fareData?.cancellationFee ?? 50);
 
   function buildInitialConfig(
     vts: CatalogueType[],
@@ -254,6 +310,8 @@ export default function FareCalculationPage() {
     vts.forEach((vt) => {
       const s = saved[vt.code] ?? {};
       result[vt.code] = {
+        pricingModel: s.pricingModel ?? DEFAULT_CONFIG.pricingModel,
+        flatFare: s.flatFare ?? DEFAULT_CONFIG.flatFare,
         base: s.base ?? DEFAULT_CONFIG.base,
         perKm: s.perKm ?? DEFAULT_CONFIG.perKm,
         perMin: s.perMin ?? DEFAULT_CONFIG.perMin,
@@ -275,20 +333,26 @@ export default function FareCalculationPage() {
     mutationFn: () =>
       settingsAPI.updateFareConfig({
         baseFares: effectiveConfig,
-        commission: fareData?.commission ?? 0.2,
-        cancellationFee: fareData?.cancellationFee ?? 50,
+        // Commission is sent as a percentage; the backend stores it as a
+        // fraction. Cancellation fee is a flat ₹ amount.
+        commission: effectiveCommissionPct,
+        cancellationFee: effectiveCancellationFee,
         minFare: Math.min(...Object.values(effectiveConfig).map((c) => c.minFare)),
       }),
     onSuccess: () => {
       toast.success('Fare configuration saved');
       queryClient.invalidateQueries({ queryKey: ['fare-settings'] });
       setLocalConfig(null);
+      setCommissionPct(null);
+      setCancellationFee(null);
     },
     onError: () => toast.error('Failed to save fare configuration'),
   });
 
   function handleReset() {
     setLocalConfig(buildInitialConfig(vehicleTypes, baseFares));
+    setCommissionPct(null);
+    setCancellationFee(null);
     toast('Reset to saved values', { icon: '↩️' });
   }
 
@@ -380,11 +444,13 @@ export default function FareCalculationPage() {
                     min={0}
                     max={100}
                     step={1}
-                    defaultValue={((fareData?.commission ?? 0.2) * 100).toFixed(0)}
+                    value={effectiveCommissionPct}
+                    onChange={(e) => setCommissionPct(parseFloat(e.target.value) || 0)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    readOnly
                   />
-                  <p className="text-xs text-gray-400 mt-1">Edit via Settings page</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Platform's cut of each fare. Applies on the next ride after saving.
+                  </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">
@@ -394,11 +460,13 @@ export default function FareCalculationPage() {
                     type="number"
                     min={0}
                     step={5}
-                    defaultValue={fareData?.cancellationFee ?? 50}
+                    value={effectiveCancellationFee}
+                    onChange={(e) => setCancellationFee(parseFloat(e.target.value) || 0)}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    readOnly
                   />
-                  <p className="text-xs text-gray-400 mt-1">Edit via Settings page</p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Charged on late cancellations. Applies on the next ride after saving.
+                  </p>
                 </div>
               </div>
             </div>

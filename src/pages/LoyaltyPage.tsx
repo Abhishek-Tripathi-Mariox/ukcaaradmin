@@ -13,7 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { loyaltyAPI } from '@/services/api';
-import { Modal } from '@/components/Modal';
+import { Modal, ConfirmModal } from '@/components/Modal';
 import {
   PageHeader,
   StatusBadge,
@@ -152,6 +152,7 @@ function TiersTab() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const q = useQuery({
     queryKey: ['loyalty-tiers'],
@@ -159,14 +160,7 @@ function TiersTab() {
   });
 
   const remove = async (id: string, name: string) => {
-    if (!confirm(`Delete tier "${name}"?`)) return;
-    try {
-      await loyaltyAPI.deleteTier(id);
-      toast.success('Deleted');
-      qc.invalidateQueries({ queryKey: ['loyalty-tiers'] });
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Failed');
-    }
+    setDeleteTarget({ id, name });
   };
 
   return (
@@ -257,6 +251,27 @@ function TiersTab() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await loyaltyAPI.deleteTier(deleteTarget.id);
+            toast.success('Deleted');
+            qc.invalidateQueries({ queryKey: ['loyalty-tiers'] });
+          } catch (e: any) {
+            toast.error(e.response?.data?.message || 'Failed');
+          } finally {
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Tier"
+        message={`Delete tier "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
@@ -413,6 +428,7 @@ function RewardsTab() {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<any>(null);
   const [open, setOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   const q = useQuery({
     queryKey: ['loyalty-rewards'],
@@ -420,14 +436,7 @@ function RewardsTab() {
   });
 
   const remove = async (id: string, name: string) => {
-    if (!confirm(`Delete reward "${name}"?`)) return;
-    try {
-      await loyaltyAPI.deleteReward(id);
-      toast.success('Deleted');
-      qc.invalidateQueries({ queryKey: ['loyalty-rewards'] });
-    } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Failed');
-    }
+    setDeleteTarget({ id, name });
   };
 
   return (
@@ -521,6 +530,27 @@ function RewardsTab() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          try {
+            await loyaltyAPI.deleteReward(deleteTarget.id);
+            toast.success('Deleted');
+            qc.invalidateQueries({ queryKey: ['loyalty-rewards'] });
+          } catch (e: any) {
+            toast.error(e.response?.data?.message || 'Failed');
+          } finally {
+            setDeleteTarget(null);
+          }
+        }}
+        title="Delete Reward"
+        message={`Delete reward "${deleteTarget?.name}"? This cannot be undone.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
@@ -934,6 +964,7 @@ function RedemptionsTab() {
   const qc = useQueryClient();
   const [status, setStatus] = useState('');
   const [code, setCode] = useState('');
+  const [cancelTarget, setCancelTarget] = useState<{ id: string; code: string } | null>(null);
 
   const q = useQuery({
     queryKey: ['loyalty-redemptions', status, code],
@@ -1038,11 +1069,7 @@ function RedemptionsTab() {
                   <td className="px-4 py-2 text-right">
                     {r.status === 'issued' && (
                       <button
-                        onClick={() => {
-                          if (confirm(`Cancel ${r.code} and refund points?`)) {
-                            cancel.mutate(r._id);
-                          }
-                        }}
+                        onClick={() => setCancelTarget({ id: r._id, code: r.code })}
                         className="px-2 py-1 text-xs text-red-600 hover:underline"
                       >
                         Cancel
@@ -1055,6 +1082,21 @@ function RedemptionsTab() {
           </table>
         )}
       </div>
+
+      <ConfirmModal
+        isOpen={!!cancelTarget}
+        onClose={() => setCancelTarget(null)}
+        onConfirm={() => {
+          if (!cancelTarget) return;
+          cancel.mutate(cancelTarget.id);
+          setCancelTarget(null);
+        }}
+        title="Cancel Redemption"
+        message={`Cancel code ${cancelTarget?.code} and refund the points to the customer?`}
+        confirmText="Cancel Redemption"
+        variant="danger"
+        isLoading={cancel.isPending}
+      />
     </div>
   );
 }

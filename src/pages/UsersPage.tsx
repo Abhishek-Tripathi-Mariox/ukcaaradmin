@@ -19,6 +19,7 @@ import {
   Calendar,
   CreditCard,
   Activity,
+  Star,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -407,6 +408,8 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
   const w = data.wallet;
   const rides = data.rides ?? [];
   const payments = data.payments ?? [];
+  const rating = data.rating ?? { average: 0, count: 0, distribution: {} };
+  const driverFeedback = data.driverFeedback ?? [];
   const currency = (n: number) =>
     `₹${(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
@@ -480,6 +483,86 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
           value={currency(w?.balance ?? 0)}
           icon={<WalletIcon className="w-5 h-5 text-emerald-500" />}
         />
+      </div>
+
+      {/* Rating from drivers */}
+      <div className="bg-white border rounded-lg p-4">
+        <div className="text-sm font-semibold mb-3">Rating from drivers</div>
+        {rating.count === 0 ? (
+          <div className="text-xs text-gray-500">No driver feedback yet</div>
+        ) : (
+          <div className="grid md:grid-cols-[200px_1fr] gap-5">
+            {/* Average + stars */}
+            <div className="flex flex-col items-center justify-center text-center border-r-0 md:border-r md:pr-5">
+              <div className="text-4xl font-bold leading-none">
+                {rating.average.toFixed(1)}
+              </div>
+              <StarRow value={rating.average} className="mt-2" />
+              <div className="text-xs text-gray-500 mt-1">
+                {rating.count} rating{rating.count === 1 ? '' : 's'}
+              </div>
+            </div>
+
+            {/* Distribution bars */}
+            <div className="space-y-1.5">
+              {[5, 4, 3, 2, 1].map((star) => {
+                const n = rating.distribution?.[star] ?? 0;
+                const pct = rating.count ? Math.round((n / rating.count) * 100) : 0;
+                return (
+                  <div key={star} className="flex items-center gap-2 text-xs">
+                    <div className="w-8 flex items-center gap-0.5 text-gray-600">
+                      {star} <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                    </div>
+                    <div className="flex-1 bg-gray-100 rounded h-2.5 overflow-hidden">
+                      <div className="bg-amber-400 h-full" style={{ width: `${pct}%` }} />
+                    </div>
+                    <div className="w-8 text-right text-gray-500">{n}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Recent driver comments */}
+        {driverFeedback.length > 0 && (
+          <div className="mt-4 pt-4 border-t space-y-3">
+            <div className="text-xs font-semibold text-gray-600 uppercase tracking-wider">
+              Recent feedback
+            </div>
+            {driverFeedback.map((f: any) => (
+              <div key={f._id} className="text-sm">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <StarRow value={f.stars} size={12} />
+                  <span className="text-gray-700 font-medium">
+                    {f.driver
+                      ? `${f.driver.firstName ?? ''} ${f.driver.lastName ?? ''}`.trim() ||
+                        'Driver'
+                      : 'Driver'}
+                  </span>
+                  {f.date && (
+                    <span className="text-xs text-gray-400">
+                      {format(new Date(f.date), 'PP')}
+                    </span>
+                  )}
+                </div>
+                {f.comment && <div className="text-gray-600 mt-0.5">{f.comment}</div>}
+                {f.tags?.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {f.tags.map((t: string, i: number) => (
+                      <span
+                        key={i}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Bookings by status + monthly chart */}
@@ -633,6 +716,31 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function StarRow({
+  value,
+  size = 16,
+  className = '',
+}: {
+  value: number;
+  size?: number;
+  className?: string;
+}) {
+  return (
+    <div className={`flex items-center gap-0.5 ${className}`}>
+      {[1, 2, 3, 4, 5].map((i) => {
+        const filled = value >= i - 0.25;
+        return (
+          <Star
+            key={i}
+            style={{ width: size, height: size }}
+            className={filled ? 'fill-amber-400 text-amber-400' : 'text-gray-300'}
+          />
+        );
+      })}
     </div>
   );
 }

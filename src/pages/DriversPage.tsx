@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -26,6 +27,10 @@ import {
   MapPin,
   ExternalLink,
   Activity,
+  Zap,
+  Lock,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -41,10 +46,23 @@ const formatGBP = (n?: number) =>
 export default function DriversPage() {
   const qc = useQueryClient();
 
-  const [tab, setTab] = useState<TabType>('all');
+  // Honour a ?tab= deep-link (e.g. the dashboard's "Review Applications"
+  // quick action sends ?tab=applications). Falls back to "all".
+  const [searchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab') as TabType | null;
+  const [tab, setTab] = useState<TabType>(
+    tabParam && ['all', 'applications', 'online'].includes(tabParam) ? tabParam : 'all',
+  );
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  // Advanced filters for the "All Drivers" list, revealed by the Filters
+  // button. Each maps to a query param the /admin/drivers endpoint supports.
+  const [showFilters, setShowFilters] = useState(false);
+  const [serviceTypeFilter, setServiceTypeFilter] = useState<string>('');
+  const [onlineFilter, setOnlineFilter] = useState<string>('');
+  const [onePassFilter, setOnePassFilter] = useState<string>('');
+  const [minRatingFilter, setMinRatingFilter] = useState<string>('');
 
   const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [showDetails, setShowDetails] = useState(false);
@@ -61,7 +79,17 @@ export default function DriversPage() {
   const [commissionRate, setCommissionRate] = useState(20);
 
   const listQuery = useQuery({
-    queryKey: ['drivers', tab, page, search, statusFilter],
+    queryKey: [
+      'drivers',
+      tab,
+      page,
+      search,
+      statusFilter,
+      serviceTypeFilter,
+      onlineFilter,
+      onePassFilter,
+      minRatingFilter,
+    ],
     queryFn: async () => {
       const params: any = { page, limit: 10 };
       if (search) params.search = search;
@@ -71,14 +99,22 @@ export default function DriversPage() {
         const res = await driversAPI.getApplications(params);
         return res.data?.data;
       }
-      if (tab === 'online') {
-        params.isOnline = true;
-        const res = await driversAPI.getAll(params);
-        return res.data?.data;
-      }
+
+      // Advanced filters apply to the All Drivers list. The Online tab forces
+      // isOnline, so the online filter is hidden/ignored there.
       if (statusFilter === 'verified') params.isVerified = true;
       else if (statusFilter === 'pending') params.isVerified = false;
       else if (statusFilter === 'suspended') params.isActive = false;
+      if (serviceTypeFilter) params.serviceType = serviceTypeFilter;
+      if (onePassFilter) params.isOnePass = onePassFilter === 'yes';
+      if (minRatingFilter) params.minRating = Number(minRatingFilter);
+
+      if (tab === 'online') {
+        params.isOnline = true;
+      } else if (onlineFilter) {
+        params.isOnline = onlineFilter === 'online';
+      }
+
       const res = await driversAPI.getAll(params);
       return res.data?.data;
     },
@@ -174,6 +210,24 @@ export default function DriversPage() {
     onError: () => toast.error('Failed to update commission'),
   });
 
+  // Advanced filters available on the All Drivers tab (Online tab forces
+  // online, so it doesn't count its own online filter).
+  const activeFilterCount =
+    (statusFilter ? 1 : 0) +
+    (serviceTypeFilter ? 1 : 0) +
+    (tab !== 'online' && onlineFilter ? 1 : 0) +
+    (onePassFilter ? 1 : 0) +
+    (minRatingFilter ? 1 : 0);
+
+  const clearFilters = () => {
+    setStatusFilter('');
+    setServiceTypeFilter('');
+    setOnlineFilter('');
+    setOnePassFilter('');
+    setMinRatingFilter('');
+    setPage(1);
+  };
+
   const columns = [
     {
       key: 'driver',
@@ -213,6 +267,11 @@ export default function DriversPage() {
           </div>
         );
       },
+    },
+    {
+      key: 'category',
+      header: 'Category',
+      render: (d: Driver) => <ServiceTypeBadge serviceType={d.driverProfile?.serviceType} />,
     },
     {
       key: 'rating',
@@ -342,6 +401,10 @@ export default function DriversPage() {
               setTab(key as TabType);
               setPage(1);
               setStatusFilter('');
+              setServiceTypeFilter('');
+              setOnlineFilter('');
+              setOnePassFilter('');
+              setMinRatingFilter('');
             }}
             className={clsx(
               'flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors',
@@ -356,42 +419,157 @@ export default function DriversPage() {
         ))}
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search by name, phone or plate…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="input pl-9"
-          />
-        </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setStatusFilter(e.target.value);
-            setPage(1);
-          }}
-          className="input sm:w-48"
-        >
+      <div className="mb-4 space-y-3">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search by name, phone or plate…"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="input pl-9"
+            />
+          </div>
           {tab === 'applications' ? (
-            <>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value);
+                setPage(1);
+              }}
+              className="input sm:w-48"
+            >
               <option value="pending">Pending</option>
               <option value="verified">Verified</option>
-            </>
+            </select>
           ) : (
-            <>
-              <option value="">All status</option>
-              <option value="verified">Verified</option>
-              <option value="pending">Unverified</option>
-              <option value="suspended">Suspended</option>
-            </>
+            <button
+              type="button"
+              onClick={() => setShowFilters((v) => !v)}
+              className={clsx(
+                'btn inline-flex items-center gap-2 shrink-0',
+                showFilters || activeFilterCount > 0 ? 'btn-primary' : 'btn-secondary',
+              )}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              Filters
+              {activeFilterCount > 0 && (
+                <span className="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1 text-xs font-semibold rounded-full bg-white/90 text-primary-700">
+                  {activeFilterCount}
+                </span>
+              )}
+            </button>
           )}
-        </select>
+        </div>
+
+        {tab !== 'applications' && showFilters && (
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">All status</option>
+                  <option value="verified">Verified</option>
+                  <option value="pending">Unverified</option>
+                  <option value="suspended">Suspended</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">Category</label>
+                <select
+                  value={serviceTypeFilter}
+                  onChange={(e) => {
+                    setServiceTypeFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">All categories</option>
+                  <option value="instant">Instant</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="private">Private</option>
+                </select>
+              </div>
+
+              {tab !== 'online' && (
+                <div>
+                  <label className="text-xs text-gray-600 block mb-1">Availability</label>
+                  <select
+                    value={onlineFilter}
+                    onChange={(e) => {
+                      setOnlineFilter(e.target.value);
+                      setPage(1);
+                    }}
+                    className="input w-full"
+                  >
+                    <option value="">All</option>
+                    <option value="online">Online</option>
+                    <option value="offline">Offline</option>
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">OnePass</label>
+                <select
+                  value={onePassFilter}
+                  onChange={(e) => {
+                    setOnePassFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">All</option>
+                  <option value="yes">OnePass</option>
+                  <option value="no">Non-OnePass</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-600 block mb-1">Minimum rating</label>
+                <select
+                  value={minRatingFilter}
+                  onChange={(e) => {
+                    setMinRatingFilter(e.target.value);
+                    setPage(1);
+                  }}
+                  className="input w-full"
+                >
+                  <option value="">Any rating</option>
+                  <option value="4.5">4.5+</option>
+                  <option value="4">4.0+</option>
+                  <option value="3">3.0+</option>
+                  <option value="2">2.0+</option>
+                </select>
+              </div>
+            </div>
+
+            {activeFilterCount > 0 && (
+              <div className="flex justify-end mt-3">
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="btn btn-secondary inline-flex items-center gap-1.5 text-sm"
+                >
+                  <X className="w-4 h-4" />
+                  Clear filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {listQuery.isLoading ? (
@@ -638,6 +816,8 @@ function DriverDetailModal({
   const [tab, setTab] = useState<DetailTab>(initialTab);
   const [ridesPage, setRidesPage] = useState(1);
   const [rideStatusFilter, setRideStatusFilter] = useState<string>('');
+  const [docRejectTarget, setDocRejectTarget] = useState<DriverDocument | null>(null);
+  const [docRejectNote, setDocRejectNote] = useState('');
 
   const detailQuery = useQuery({
     queryKey: ['driver-detail', driverId],
@@ -671,6 +851,7 @@ function DriverDetailModal({
     | undefined;
 
   return (
+    <>
     <Modal
       isOpen
       onClose={onClose}
@@ -1003,14 +1184,7 @@ function DriverDetailModal({
                       )}
                       {doc.status !== 'rejected' && (
                         <button
-                          onClick={() => {
-                            const note = window.prompt('Rejection note (optional)') || undefined;
-                            onAction.verifyDocument({
-                              documentType: doc.type,
-                              status: 'rejected',
-                              note,
-                            });
-                          }}
+                          onClick={() => { setDocRejectNote(''); setDocRejectTarget(doc); }}
                           className="btn btn-danger btn-sm"
                         >
                           Reject
@@ -1072,6 +1246,50 @@ function DriverDetailModal({
         </div>
       )}
     </Modal>
+
+    {docRejectTarget && (
+      <Modal
+        isOpen
+        onClose={() => setDocRejectTarget(null)}
+        title="Reject Document"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Rejecting <span className="font-medium capitalize">{docRejectTarget.type.replace(/_/g, ' ')}</span>.
+          </p>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rejection note (optional)</label>
+            <input
+              autoFocus
+              className="input w-full"
+              placeholder="e.g. Document is blurry, expired…"
+              value={docRejectNote}
+              onChange={(e) => setDocRejectNote(e.target.value)}
+            />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button className="btn btn-secondary" onClick={() => setDocRejectTarget(null)}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-danger"
+              onClick={() => {
+                onAction.verifyDocument({
+                  documentType: docRejectTarget.type,
+                  status: 'rejected',
+                  note: docRejectNote.trim() || undefined,
+                });
+                setDocRejectTarget(null);
+              }}
+            >
+              Confirm Reject
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )}
+  </>
   );
 }
 
@@ -1167,6 +1385,34 @@ function driverStatusLabel(d: Driver): string {
   if (!d.isActive) return 'suspended';
   if (!d.isVerified) return 'pending';
   return 'verified';
+}
+
+// The service category the driver registered for. Mirrors
+// User.driverProfile.serviceType on the backend ('instant' | 'private' |
+// 'scheduled'). Older drivers onboarded before this field existed show "—".
+function ServiceTypeBadge({
+  serviceType,
+}: {
+  serviceType?: 'instant' | 'private' | 'scheduled';
+}) {
+  if (!serviceType) return <span className="text-gray-400 text-sm">—</span>;
+  const config = {
+    instant: { label: 'Instant', icon: Zap, cls: 'bg-green-100 text-green-700' },
+    scheduled: { label: 'Scheduled', icon: Calendar, cls: 'bg-blue-100 text-blue-700' },
+    private: { label: 'Private', icon: Lock, cls: 'bg-purple-100 text-purple-700' },
+  }[serviceType];
+  const Icon = config.icon;
+  return (
+    <span
+      className={clsx(
+        'inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium',
+        config.cls,
+      )}
+    >
+      <Icon className="w-3 h-3" />
+      {config.label}
+    </span>
+  );
 }
 
 // Leaflet bundlers strip default marker icon URLs — rebind once per module

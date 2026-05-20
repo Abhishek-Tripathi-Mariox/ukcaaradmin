@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { dashboardAPI } from '@/services/api';
 import { StatCard, PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
@@ -139,6 +140,51 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Quick Actions */}
+      <div className="mb-8 bg-white rounded-xl shadow-sm p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <Link
+            to="/drivers?tab=applications"
+            className="flex flex-col items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
+          >
+            <Clock className="w-8 h-8 text-yellow-600 mb-2" />
+            <span className="text-sm font-medium text-yellow-700">
+              Review Applications
+            </span>
+            <span className="text-xs text-yellow-600 mt-1">
+              {metrics?.drivers.pending || 0} pending
+            </span>
+          </Link>
+          <Link
+            to="/rides?tab=live"
+            className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+          >
+            <MapPin className="w-8 h-8 text-blue-600 mb-2" />
+            <span className="text-sm font-medium text-blue-700">Live Rides</span>
+            <span className="text-xs text-blue-600 mt-1">
+              {metrics?.rides.active || 0} active
+            </span>
+          </Link>
+          <Link
+            to="/rides?tab=disputes"
+            className="flex flex-col items-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+          >
+            <XCircle className="w-8 h-8 text-red-600 mb-2" />
+            <span className="text-sm font-medium text-red-700">Disputes</span>
+            <span className="text-xs text-red-600 mt-1">Review issues</span>
+          </Link>
+          <Link
+            to="/payments"
+            className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
+          >
+            <CreditCard className="w-8 h-8 text-purple-600 mb-2" />
+            <span className="text-sm font-medium text-purple-700">Payments</span>
+            <span className="text-xs text-purple-600 mt-1">Manage transactions</span>
+          </Link>
+        </div>
+      </div>
+
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* Rides Chart */}
@@ -266,51 +312,6 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Quick Actions */}
-      <div className="mt-8 bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Quick Actions</h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <a
-            href="/drivers?status=pending"
-            className="flex flex-col items-center p-4 bg-yellow-50 rounded-lg hover:bg-yellow-100 transition-colors"
-          >
-            <Clock className="w-8 h-8 text-yellow-600 mb-2" />
-            <span className="text-sm font-medium text-yellow-700">
-              Review Applications
-            </span>
-            <span className="text-xs text-yellow-600 mt-1">
-              {metrics?.drivers.pending || 0} pending
-            </span>
-          </a>
-          <a
-            href="/rides?status=active"
-            className="flex flex-col items-center p-4 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-          >
-            <MapPin className="w-8 h-8 text-blue-600 mb-2" />
-            <span className="text-sm font-medium text-blue-700">Live Rides</span>
-            <span className="text-xs text-blue-600 mt-1">
-              {metrics?.rides.active || 0} active
-            </span>
-          </a>
-          <a
-            href="/rides?status=dispute"
-            className="flex flex-col items-center p-4 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
-          >
-            <XCircle className="w-8 h-8 text-red-600 mb-2" />
-            <span className="text-sm font-medium text-red-700">Disputes</span>
-            <span className="text-xs text-red-600 mt-1">Review issues</span>
-          </a>
-          <a
-            href="/payments"
-            className="flex flex-col items-center p-4 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors"
-          >
-            <CreditCard className="w-8 h-8 text-purple-600 mb-2" />
-            <span className="text-sm font-medium text-purple-700">Payments</span>
-            <span className="text-xs text-purple-600 mt-1">Manage transactions</span>
-          </a>
         </div>
       </div>
     </div>
