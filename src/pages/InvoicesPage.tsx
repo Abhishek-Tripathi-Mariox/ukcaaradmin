@@ -38,8 +38,6 @@ export default function InvoicesPage() {
   const [detail, setDetail] = useState<Invoice | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
 
   const listQ = useQuery({
     queryKey: ['invoices', page, type, status],

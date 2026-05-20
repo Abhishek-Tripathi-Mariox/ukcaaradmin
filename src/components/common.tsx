@@ -74,7 +74,7 @@ interface StatCardProps {
     value: number;
     isPositive: boolean;
   };
-  color?: 'primary' | 'green' | 'yellow' | 'red' | 'purple';
+  color?: 'primary' | 'green' | 'yellow' | 'red' | 'purple' | 'blue';
 }
 
 export function StatCard({ title, value, icon, change, color = 'primary' }: StatCardProps) {
@@ -84,6 +84,7 @@ export function StatCard({ title, value, icon, change, color = 'primary' }: Stat
     yellow: 'bg-yellow-50 text-yellow-600',
     red: 'bg-red-50 text-red-600',
     purple: 'bg-purple-50 text-purple-600',
+    blue: 'bg-blue-50 text-blue-600',
   };
 
   return (

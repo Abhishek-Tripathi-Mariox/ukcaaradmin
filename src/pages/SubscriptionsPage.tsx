@@ -165,7 +165,7 @@ export default function SubscriptionsPage() {
 
   // ── Queries ────────────────────────────────────────────────────────────────
 
-  const { data: stats, refetch: refetchStats } = useQuery({
+  const { data: stats } = useQuery({
     queryKey: ['subscriptions', 'stats'],
     queryFn: async () => {
       const res = await subscriptionsAPI.getStats();
@@ -346,12 +346,12 @@ export default function SubscriptionsPage() {
       {/* Stats row */}
       {stats && (
         <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-          <StatCard title="Total Plans" value={stats.totalPlans} icon={Layers} />
-          <StatCard title="Active Plans" value={stats.activePlans} icon={CheckCircle} color="green" />
-          <StatCard title="Total Subscribers" value={stats.totalSubscribers} icon={Users} />
-          <StatCard title="Active Subscribers" value={stats.activeSubscribers} icon={Car} color="blue" />
-          <StatCard title="MRR" value={fmtINR(stats.mrr)} icon={DollarSign} color="purple" />
-          <StatCard title="Expiring in 7d" value={stats.expiringIn7Days} icon={Calendar} color="yellow" />
+          <StatCard title="Total Plans" value={stats.totalPlans} icon={<Layers className="w-6 h-6" />} />
+          <StatCard title="Active Plans" value={stats.activePlans} icon={<CheckCircle className="w-6 h-6" />} color="green" />
+          <StatCard title="Total Subscribers" value={stats.totalSubscribers} icon={<Users className="w-6 h-6" />} />
+          <StatCard title="Active Subscribers" value={stats.activeSubscribers} icon={<Car className="w-6 h-6" />} color="blue" />
+          <StatCard title="MRR" value={fmtINR(stats.mrr)} icon={<DollarSign className="w-6 h-6" />} color="purple" />
+          <StatCard title="Expiring in 7d" value={stats.expiringIn7Days} icon={<Calendar className="w-6 h-6" />} color="yellow" />
         </div>
       )}
 
@@ -547,8 +547,9 @@ export default function SubscriptionsPage() {
             <DataTable
               columns={[
                 {
+                  key: 'subscriber',
                   header: 'Subscriber',
-                  cell: (row: Subscriber) => {
+                  render: (row: Subscriber) => {
                     const person = row.driver ?? row.customer;
                     return (
                       <div>
@@ -560,8 +561,9 @@ export default function SubscriptionsPage() {
                   },
                 },
                 {
+                  key: 'plan',
                   header: 'Plan',
-                  cell: (row: Subscriber) => {
+                  render: (row: Subscriber) => {
                     const meta = PLAN_TYPE_META[row.plan?.type ?? 'monthly'];
                     return (
                       <div className="flex items-center gap-2">
@@ -574,12 +576,14 @@ export default function SubscriptionsPage() {
                   },
                 },
                 {
+                  key: 'status',
                   header: 'Status',
-                  cell: (row: Subscriber) => <StatusBadge status={row.status} />,
+                  render: (row: Subscriber) => <StatusBadge status={row.status} />,
                 },
                 {
+                  key: 'validity',
                   header: 'Validity',
-                  cell: (row: Subscriber) => {
+                  render: (row: Subscriber) => {
                     const left = daysLeft(row.endDate);
                     return (
                       <div className="text-sm">
@@ -592,23 +596,26 @@ export default function SubscriptionsPage() {
                   },
                 },
                 {
+                  key: 'rides',
                   header: 'Rides',
-                  cell: (row: Subscriber) => (
+                  render: (row: Subscriber) => (
                     <span className="text-sm text-gray-700">
                       {row.ridesUsed} / {row.plan?.rideLimit ?? '∞'}
                     </span>
                   ),
                 },
                 {
+                  key: 'autoRenew',
                   header: 'Auto-renew',
-                  cell: (row: Subscriber) =>
+                  render: (row: Subscriber) =>
                     row.autoRenew
                       ? <CheckCircle className="w-4 h-4 text-green-500" />
                       : <XCircle className="w-4 h-4 text-gray-300" />,
                 },
                 {
+                  key: 'actions',
                   header: '',
-                  cell: (row: Subscriber) => (
+                  render: (row: Subscriber) => (
                     <button
                       onClick={() => { setSelectedSub(row); setShowSubDetail(true); }}
                       className="p-1 hover:bg-gray-100 rounded"
@@ -640,9 +647,9 @@ export default function SubscriptionsPage() {
             <>
               {/* MRR breakdown */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <StatCard title="Monthly Recurring Revenue" value={fmtINR(revenueData.mrr ?? 0)} icon={TrendingUp} color="green" />
-                <StatCard title="Collected This Month" value={fmtINR(revenueData.collectedThisMonth ?? 0)} icon={DollarSign} color="blue" />
-                <StatCard title="Renewal Rate" value={`${revenueData.renewalRate ?? 0}%`} icon={Repeat} color="purple" />
+                <StatCard title="Monthly Recurring Revenue" value={fmtINR(revenueData.mrr ?? 0)} icon={<TrendingUp className="w-6 h-6" />} color="green" />
+                <StatCard title="Collected This Month" value={fmtINR(revenueData.collectedThisMonth ?? 0)} icon={<DollarSign className="w-6 h-6" />} color="blue" />
+                <StatCard title="Renewal Rate" value={`${revenueData.renewalRate ?? 0}%`} icon={<Repeat className="w-6 h-6" />} color="purple" />
               </div>
 
               {/* Per-plan revenue table */}
@@ -652,10 +659,11 @@ export default function SubscriptionsPage() {
                 </div>
                 <DataTable
                   columns={[
-                    { header: 'Plan', accessor: 'planName' },
+                    { key: 'planName', header: 'Plan' },
                     {
+                      key: 'type',
                       header: 'Type',
-                      cell: (row: any) => {
+                      render: (row: any) => {
                         const meta = PLAN_TYPE_META[row.type as PlanType];
                         return (
                           <span className={clsx('text-xs font-medium px-2 py-0.5 rounded-full', meta?.color)}>
@@ -664,18 +672,21 @@ export default function SubscriptionsPage() {
                         );
                       },
                     },
-                    { header: 'Active Subs', accessor: 'activeCount' },
+                    { key: 'activeCount', header: 'Active Subs' },
                     {
+                      key: 'monthRevenue',
                       header: 'Revenue (Month)',
-                      cell: (row: any) => <span>{fmtINR(row.monthRevenue ?? 0)}</span>,
+                      render: (row: any) => <span>{fmtINR(row.monthRevenue ?? 0)}</span>,
                     },
                     {
+                      key: 'totalRevenue',
                       header: 'Revenue (Total)',
-                      cell: (row: any) => <span>{fmtINR(row.totalRevenue ?? 0)}</span>,
+                      render: (row: any) => <span>{fmtINR(row.totalRevenue ?? 0)}</span>,
                     },
                     {
+                      key: 'avgCommission',
                       header: 'Avg. Commission Earned',
-                      cell: (row: any) => <span>{fmtINR(row.avgCommission ?? 0)}</span>,
+                      render: (row: any) => <span>{fmtINR(row.avgCommission ?? 0)}</span>,
                     },
                   ]}
                   data={revenueData.byPlan ?? []}
