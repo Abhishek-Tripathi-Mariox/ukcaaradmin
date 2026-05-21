@@ -17,6 +17,7 @@ const DriversPage = lazy(() => import('@/pages/DriversPage'));
 const RidesPage = lazy(() => import('@/pages/RidesPage'));
 const PaymentsPage = lazy(() => import('@/pages/PaymentsPage'));
 const PromosPage = lazy(() => import('@/pages/PromosPage'));
+const RechargeOffersPage = lazy(() => import('@/pages/RechargeOffersPage'));
 const OnePassPage = lazy(() => import('@/pages/OnePassPage'));
 const ChatPage = lazy(() => import('@/pages/ChatPage'));
 const NotificationsPage = lazy(() => import('@/pages/NotificationsPage'));
@@ -291,6 +292,14 @@ function AppRoutes() {
             }
           />
           <Route path="promos" element={<PromosPage />} />
+          <Route
+            path="recharge-offers"
+            element={
+              <PermissionGuard permission="view_promos">
+                <RechargeOffersPage />
+              </PermissionGuard>
+            }
+          />
           <Route path="onepass" element={<OnePassPage />} />
           <Route path="chat" element={<ChatPage />} />
           <Route path="notifications" element={<NotificationsPage />} />

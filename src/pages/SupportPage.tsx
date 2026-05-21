@@ -530,6 +530,9 @@ function TicketDetail({
     queryFn: async () => (await supportAPI.get(ticketId)).data.data as Ticket,
   });
   const ticket = q.data;
+  // Once support closes a ticket it's terminal — lock every control so it
+  // can't be reopened or edited. The backend rejects these too.
+  const adminClosed = ticket?.status === 'closed' && ticket?.closedByRole === 'admin';
 
   const replyMut = useMutation({
     mutationFn: () => supportAPI.reply(ticketId, { body: reply, internal }),
@@ -617,33 +620,40 @@ function TicketDetail({
               })}
             </div>
 
-            <div className="border border-gray-200 rounded-lg p-2 bg-white">
-              <textarea
-                value={reply}
-                onChange={(e) => setReply(e.target.value)}
-                rows={3}
-                placeholder={internal ? 'Internal note (not visible to user)' : 'Reply to user…'}
-                className="w-full px-2 py-1 text-sm focus:outline-none resize-none"
-              />
-              <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                <label className="flex items-center gap-1 text-xs text-gray-600">
-                  <input
-                    type="checkbox"
-                    checked={internal}
-                    onChange={(e) => setInternal(e.target.checked)}
-                  />
-                  Internal note
-                </label>
-                <button
-                  onClick={() => reply.trim() && replyMut.mutate()}
-                  disabled={!reply.trim() || replyMut.isPending}
-                  className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                >
-                  <MessageSquare className="w-4 h-4" />
-                  {replyMut.isPending ? 'Sending…' : internal ? 'Save note' : 'Send reply'}
-                </button>
+            {adminClosed ? (
+              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm text-gray-500">
+                This ticket was closed by support and is locked. The customer must
+                create a new ticket to continue.
               </div>
-            </div>
+            ) : (
+              <div className="border border-gray-200 rounded-lg p-2 bg-white">
+                <textarea
+                  value={reply}
+                  onChange={(e) => setReply(e.target.value)}
+                  rows={3}
+                  placeholder={internal ? 'Internal note (not visible to user)' : 'Reply to user…'}
+                  className="w-full px-2 py-1 text-sm focus:outline-none resize-none"
+                />
+                <div className="flex items-center justify-between border-t border-gray-100 pt-2">
+                  <label className="flex items-center gap-1 text-xs text-gray-600">
+                    <input
+                      type="checkbox"
+                      checked={internal}
+                      onChange={(e) => setInternal(e.target.checked)}
+                    />
+                    Internal note
+                  </label>
+                  <button
+                    onClick={() => reply.trim() && replyMut.mutate()}
+                    disabled={!reply.trim() || replyMut.isPending}
+                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
+                  >
+                    <MessageSquare className="w-4 h-4" />
+                    {replyMut.isPending ? 'Sending…' : internal ? 'Save note' : 'Send reply'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Sidebar */}
@@ -675,8 +685,9 @@ function TicketDetail({
             <Sidebar label="Priority">
               <select
                 value={ticket.priority}
+                disabled={adminClosed}
                 onChange={(e) => updateMut.mutate({ priority: e.target.value })}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:text-gray-400"
               >
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
@@ -690,7 +701,7 @@ function TicketDetail({
               {ticket.assignedTo ? (
                 <div className="text-sm">
                   {userName(ticket.assignedTo)}
-                  {me && (ticket.assignedTo as any)._id !== (me as any)._id && (
+                  {me && !adminClosed && (ticket.assignedTo as any)._id !== (me as any)._id && (
                     <button
                       onClick={() => claim.mutate()}
                       className="ml-2 text-xs text-blue-600 hover:underline"
@@ -702,7 +713,8 @@ function TicketDetail({
               ) : (
                 <button
                   onClick={() => claim.mutate()}
-                  className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50"
+                  disabled={adminClosed}
+                  className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Claim
                 </button>
@@ -771,13 +783,14 @@ function TicketDetail({
             <Sidebar label="Resolution">
               <textarea
                 defaultValue={ticket.resolution ?? ''}
+                disabled={adminClosed}
                 onBlur={(e) => {
                   if (e.target.value !== (ticket.resolution ?? '')) {
                     updateMut.mutate({ resolution: e.target.value });
                   }
                 }}
                 rows={3}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
+                className="w-full px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:text-gray-400"
                 placeholder="Notes on how this was resolved…"
               />
             </Sidebar>

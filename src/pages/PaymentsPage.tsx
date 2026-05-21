@@ -4,6 +4,7 @@ import { paymentsAPI, walletsAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
+import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
 import {
   Search,
   Eye,
@@ -32,7 +33,7 @@ export default function PaymentsPage() {
   const [showWalletModal, setShowWalletModal] = useState(false);
   const [refundAmount, setRefundAmount] = useState(0);
   const [refundReason, setRefundReason] = useState('');
-  const [walletUserId, setWalletUserId] = useState('');
+  const [walletUser, setWalletUser] = useState<AdminUserLite | null>(null);
   const [walletAmount, setWalletAmount] = useState(0);
   const [walletType, setWalletType] = useState<'credit' | 'debit'>('credit');
   const [walletReason, setWalletReason] = useState('');
@@ -88,7 +89,7 @@ export default function PaymentsPage() {
       queryClient.invalidateQueries({ queryKey: ['payments'] });
       toast.success('Wallet adjusted');
       setShowWalletModal(false);
-      setWalletUserId('');
+      setWalletUser(null);
       setWalletAmount(0);
       setWalletReason('');
     },
@@ -537,25 +538,19 @@ export default function PaymentsPage() {
         isOpen={showWalletModal}
         onClose={() => {
           setShowWalletModal(false);
-          setWalletUserId('');
+          setWalletUser(null);
           setWalletAmount(0);
           setWalletReason('');
         }}
         title="Adjust User Wallet"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              User ID *
-            </label>
-            <input
-              type="text"
-              value={walletUserId}
-              onChange={(e) => setWalletUserId(e.target.value)}
-              className="input"
-              placeholder="Enter user ID..."
-            />
-          </div>
+          <UserSearchSelect
+            label="User"
+            required
+            value={walletUser}
+            onChange={setWalletUser}
+          />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Type *
@@ -614,9 +609,9 @@ export default function PaymentsPage() {
             </button>
             <button
               onClick={() => {
-                if (walletUserId && walletAmount > 0 && walletReason) {
+                if (walletUser && walletAmount > 0 && walletReason) {
                   adjustWalletMutation.mutate({
-                    userId: walletUserId,
+                    userId: walletUser._id,
                     amount: walletAmount,
                     type: walletType,
                     reason: walletReason,
@@ -624,7 +619,7 @@ export default function PaymentsPage() {
                 }
               }}
               className="btn btn-primary"
-              disabled={!walletUserId || walletAmount <= 0 || !walletReason || adjustWalletMutation.isPending}
+              disabled={!walletUser || walletAmount <= 0 || !walletReason || adjustWalletMutation.isPending}
             >
               Adjust Wallet
             </button>

@@ -262,8 +262,13 @@ export default function RidesPage() {
   });
 
   const cancelMutation = useMutation({
+    // Shuttle seat reservations carry a `sched_` id and live in a separate
+    // collection, so they take the booking-cancel endpoint; everything else
+    // is a real Ride.
     mutationFn: ({ id, reason, refundPct }: { id: string; reason: string; refundPct: number }) =>
-      ridesAPI.cancel(id, reason, refundPct),
+      id.startsWith('sched_')
+        ? ridesAPI.cancelScheduledBooking(id, reason)
+        : ridesAPI.cancel(id, reason, refundPct),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rides'] });
       toast.success('Ride cancelled');
@@ -443,19 +448,23 @@ export default function RidesPage() {
           >
             <Eye className="w-4 h-4 text-gray-500" />
           </button>
+          {/* Cancel is allowed for any non-terminal ride — instant, private,
+              scheduled, or a shuttle seat reservation (status 'reserved'). */}
+          {!['completed', 'cancelled'].includes(ride.status) && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedRide(ride);
+                setShowCancelModal(true);
+              }}
+              className="p-2 hover:bg-red-50 rounded-lg"
+              title="Cancel Ride"
+            >
+              <XCircle className="w-4 h-4 text-red-500" />
+            </button>
+          )}
           {['searching', 'driver_assigned', 'driver_arriving', 'driver_arrived', 'in_progress', 'payment_pending'].includes(ride.status) && (
             <>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedRide(ride);
-                  setShowCancelModal(true);
-                }}
-                className="p-2 hover:bg-red-50 rounded-lg"
-                title="Cancel Ride"
-              >
-                <XCircle className="w-4 h-4 text-red-500" />
-              </button>
               {ride.driver && (
                 <button
                   onClick={(e) => {
@@ -1061,6 +1070,49 @@ export default function RidesPage() {
                 )}
               </div>
             )}
+
+            {selectedRide.status === 'cancelled' && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2 flex items-center gap-2">
+                  <XCircle className="w-4 h-4 text-red-500" />
+                  Cancellation
+                </h4>
+                <div className="text-sm text-gray-700 space-y-1">
+                  <div>
+                    <span className="text-gray-500">Cancelled by: </span>
+                    <span className="font-medium capitalize">
+                      {selectedRide.cancellation?.cancelledBy ?? 'Unknown'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Reason: </span>
+                    {selectedRide.cancellation?.reason || 'No reason provided'}
+                  </div>
+                  {selectedRide.cancellation?.cancelledAt && (
+                    <div className="text-xs text-gray-400">
+                      {format(new Date(selectedRide.cancellation.cancelledAt), 'PPpp')}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Admin can cancel any non-terminal ride — including scheduled
+                rides and shuttle seat reservations — straight from here. */}
+            {!['completed', 'cancelled'].includes(selectedRide.status) && (
+              <div className="flex justify-end border-t pt-4">
+                <button
+                  onClick={() => {
+                    setShowDetails(false);
+                    setShowCancelModal(true);
+                  }}
+                  className="btn btn-danger inline-flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" />
+                  Cancel this ride
+                </button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -1087,19 +1139,23 @@ export default function RidesPage() {
               placeholder="Enter reason..."
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Refund Percentage
-            </label>
-            <input
-              type="number"
-              value={refundPercentage}
-              onChange={(e) => setRefundPercentage(Number(e.target.value))}
-              className="input"
-              min={0}
-              max={100}
-            />
-          </div>
+          {/* Shuttle seat reservations are cancelled via the booking endpoint,
+              which doesn't process refunds — hide the field for those. */}
+          {!selectedRide?._id.startsWith('sched_') && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Refund Percentage
+              </label>
+              <input
+                type="number"
+                value={refundPercentage}
+                onChange={(e) => setRefundPercentage(Number(e.target.value))}
+                className="input"
+                min={0}
+                max={100}
+              />
+            </div>
+          )}
           <div className="flex justify-end gap-3">
             <button onClick={() => setShowCancelModal(false)} className="btn btn-secondary">
               Close

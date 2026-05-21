@@ -161,6 +161,20 @@ export default function UsersPage() {
       ),
     },
     {
+      key: 'rating',
+      header: 'Rating',
+      render: (user: User) =>
+        user.rating && user.rating.count > 0 ? (
+          <span className="inline-flex items-center gap-1 text-sm text-gray-700">
+            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+            {user.rating.average.toFixed(1)}
+            <span className="text-xs text-gray-400">({user.rating.count})</span>
+          </span>
+        ) : (
+          <span className="text-gray-400 text-sm">—</span>
+        ),
+    },
+    {
       key: 'createdAt',
       header: 'Joined',
       render: (user: User) => (

@@ -4,6 +4,7 @@ import { subscriptionsAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, StatCard, RefreshButton } from '@/components/common';
+import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
 import {
   Plus,
   Edit2,
@@ -158,6 +159,7 @@ export default function SubscriptionsPage() {
   const [showSubDetail, setShowSubDetail] = useState(false);
   const [showGrantModal, setShowGrantModal] = useState(false);
   const [grantData, setGrantData] = useState({ userId: '', userType: 'driver', planId: '', reason: '' });
+  const [grantUser, setGrantUser] = useState<AdminUserLite | null>(null);
   const [showCancelSubModal, setShowCancelSubModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
 
@@ -248,6 +250,7 @@ export default function SubscriptionsPage() {
       toast.success('Subscription granted');
       setShowGrantModal(false);
       setGrantData({ userId: '', userType: 'driver', planId: '', reason: '' });
+      setGrantUser(null);
     },
     onError: () => toast.error('Failed to grant subscription'),
   });
@@ -932,28 +935,20 @@ export default function SubscriptionsPage() {
         title="Grant Subscription"
       >
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="form-label">User Type</label>
-              <select
-                className="input w-full"
-                value={grantData.userType}
-                onChange={(e) => setGrantData((g) => ({ ...g, userType: e.target.value }))}
-              >
-                <option value="driver">Driver</option>
-                <option value="customer">Customer</option>
-              </select>
-            </div>
-            <div>
-              <label className="form-label">User ID</label>
-              <input
-                className="input w-full"
-                placeholder="Driver / Customer ID"
-                value={grantData.userId}
-                onChange={(e) => setGrantData((g) => ({ ...g, userId: e.target.value }))}
-              />
-            </div>
-          </div>
+          <UserSearchSelect
+            label="User"
+            required
+            defaultRole="driver"
+            value={grantUser}
+            onChange={(u) => {
+              setGrantUser(u);
+              setGrantData((g) => ({
+                ...g,
+                userId: u?._id ?? '',
+                userType: (u?.role as string) ?? g.userType,
+              }));
+            }}
+          />
           <div>
             <label className="form-label">Plan</label>
             <select
@@ -977,7 +972,7 @@ export default function SubscriptionsPage() {
             />
           </div>
           <div className="flex justify-end gap-3 pt-2">
-            <button className="btn btn-secondary" onClick={() => setShowGrantModal(false)}>Cancel</button>
+            <button className="btn btn-secondary" onClick={() => { setShowGrantModal(false); setGrantUser(null); }}>Cancel</button>
             <button
               className="btn btn-primary"
               onClick={() => grantMutation.mutate(grantData)}

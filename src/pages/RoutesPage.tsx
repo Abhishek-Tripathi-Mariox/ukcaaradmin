@@ -4,6 +4,7 @@ import { routesAPI, driversAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 import { PlaceSearchInput } from '@/components/PlaceSearchInput';
+import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
 import { Plus, Pencil, Trash2, MapPin, Users, UserCog, Search, UserPlus, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -1007,7 +1008,7 @@ function ManageRouteModal({
 }) {
   const qc = useQueryClient();
   const [tab, setTab] = useState<'drivers' | 'users'>('drivers');
-  const [userIdInput, setUserIdInput] = useState('');
+  const [assignUser, setAssignUser] = useState<AdminUserLite | null>(null);
 
   // Driver picker — search the global driver pool to assign someone to this
   // route. Debounced so we don't fire a request on every keystroke.
@@ -1079,7 +1080,7 @@ function ManageRouteModal({
     mutationFn: (uid: string) => routesAPI.assignUser(route._id, uid),
     onSuccess: () => {
       toast.success('User assigned');
-      setUserIdInput('');
+      setAssignUser(null);
       refetchAll();
     },
     onError: (e: any) =>
@@ -1290,25 +1291,19 @@ function ManageRouteModal({
         </div>
       ) : (
         <div className="space-y-3">
-          <div className="flex gap-2">
-            <input
-              className="input flex-1"
-              placeholder="User ID to assign"
-              value={userIdInput}
-              onChange={(e) => setUserIdInput(e.target.value)}
-            />
-            <button
-              className="btn-primary"
-              disabled={!userIdInput.trim() || assignMut.isPending}
-              onClick={() => assignMut.mutate(userIdInput.trim())}
-            >
-              Assign
-            </button>
-          </div>
-          <p className="text-[11px] text-gray-500">
-            Tip: paste a user id from the Users page. A picker UI will come in a
-            later iteration.
-          </p>
+          <UserSearchSelect
+            label="Assign rider"
+            roles={['customer']}
+            value={assignUser}
+            onChange={setAssignUser}
+          />
+          <button
+            className="btn-primary w-full"
+            disabled={!assignUser || assignMut.isPending}
+            onClick={() => assignUser && assignMut.mutate(assignUser._id)}
+          >
+            Assign to route
+          </button>
           <div className="space-y-2 max-h-[50vh] overflow-y-auto">
             {users.length === 0 && (
               <div className="text-sm text-gray-500 text-center py-6">

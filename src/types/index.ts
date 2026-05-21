@@ -9,6 +9,9 @@ export interface User {
   avatar?: string;
   isActive: boolean;
   isVerified: boolean;
+  // Average rating this user received from drivers (rating.driverToCustomer),
+  // computed by the admin users-list endpoint. count === 0 means unrated.
+  rating?: { average: number; count: number };
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +41,15 @@ export interface DriverProfile {
   commissionRate?: number;
 
   documents: DriverDocument[];
+  // Payout bank details captured on the "complete profile" step. Shown in the
+  // admin driver documents tab alongside uploaded documents.
+  bankDetails?: {
+    accountHolder?: string;
+    bankName?: string;
+    accountNumber?: string;
+    ifsc?: string;
+    passbookUrl?: string;
+  };
   currentLocation?: { lat: number; lng: number };
 }
 
@@ -75,7 +87,7 @@ export interface Ride {
   isScheduled?: boolean;
   scheduledAt?: string;
   vehicleType?: 'standard' | 'comfort' | 'xl';
-  status: 'searching' | 'driver_assigned' | 'driver_arriving' | 'driver_arrived' | 'in_progress' | 'completed' | 'cancelled';
+  status: 'searching' | 'driver_assigned' | 'driver_arriving' | 'driver_arrived' | 'in_progress' | 'completed' | 'cancelled' | 'reserved';
   // Flat fare fields as stored/returned by the backend
   estimatedFare: number;
   actualFare?: number;
@@ -97,8 +109,15 @@ export interface Ride {
   paymentStatus: 'pending' | 'completed' | 'failed' | 'refunded';
   rating?: number;
   review?: string;
-  cancelledBy?: 'customer' | 'driver' | 'admin';
-  cancellationReason?: string;
+  // Cancellation detail as stored on the Ride doc / projected from a
+  // shuttle booking. Nested (not flat) — read `cancellation.cancelledBy`
+  // and `cancellation.reason` in the UI.
+  cancellation?: {
+    cancelledBy: 'customer' | 'driver' | 'admin' | 'system';
+    reason: string;
+    fee?: number;
+    cancelledAt?: string;
+  };
   dispute?: {
     status: 'open' | 'resolved';
     reason: string;

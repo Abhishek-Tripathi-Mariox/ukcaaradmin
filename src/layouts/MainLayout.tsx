@@ -29,6 +29,7 @@ import {
   Repeat,
   Share2,
   HelpCircle,
+  Wallet,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -91,6 +92,7 @@ const navGroups: NavGroup[] = [
     label: 'Growth',
     items: [
       { name: 'Promo Codes', href: '/promos', icon: Tag, perm: PERMISSIONS.VIEW_PROMOS },
+      { name: 'Recharge Offers', href: '/recharge-offers', icon: Wallet, perm: PERMISSIONS.VIEW_PROMOS },
       { name: 'Referrals', href: '/referrals', icon: Share2, perm: PERMISSIONS.VIEW_REFERRALS },
       // { name: 'OnePass', href: '/onepass', icon: Crown, perm: PERMISSIONS.VIEW_ONEPASS },
       // { name: 'Loyalty', href: '/loyalty', icon: Gift, perm: PERMISSIONS.VIEW_LOYALTY },

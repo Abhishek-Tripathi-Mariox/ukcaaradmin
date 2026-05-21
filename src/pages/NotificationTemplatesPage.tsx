@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationTemplatesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
+import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
 import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -504,7 +505,7 @@ function TestSendModal({
   template: Template;
   onClose: () => void;
 }) {
-  const [userId, setUserId] = useState('');
+  const [user, setUser] = useState<AdminUserLite | null>(null);
   const [varsText, setVarsText] = useState(
     JSON.stringify(template.defaultData ?? {}, null, 2),
   );
@@ -517,7 +518,7 @@ function TestSendModal({
       } catch {
         throw new Error('vars must be valid JSON');
       }
-      return notificationTemplatesAPI.test(template._id, { userId, vars });
+      return notificationTemplatesAPI.test(template._id, { userId: user!._id, vars });
     },
     onSuccess: (res) => {
       const d = res.data?.data;
@@ -534,16 +535,9 @@ function TestSendModal({
     <Modal isOpen onClose={onClose} title={`Test send — ${template.key}`} size="md">
       <div className="space-y-3">
         <div>
-          <label className="text-xs text-gray-600">User ID</label>
-          <input
-            className="input font-mono text-sm"
-            value={userId}
-            onChange={(e) => setUserId(e.target.value)}
-            placeholder="MongoDB ObjectId"
-          />
+          <UserSearchSelect label="Recipient" required value={user} onChange={setUser} />
           <p className="text-[10px] text-gray-500 mt-1">
-            Find a user ID from the Users page. The notification respects the user's locale and
-            FCM tokens.
+            The notification respects the user's locale and FCM tokens.
           </p>
         </div>
         <div>
@@ -561,7 +555,7 @@ function TestSendModal({
           </button>
           <button
             onClick={() => send.mutate()}
-            disabled={send.isPending || !userId}
+            disabled={send.isPending || !user}
             className="btn btn-primary"
           >
             <Send className="w-4 h-4 mr-1" />

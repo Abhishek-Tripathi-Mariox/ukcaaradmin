@@ -1196,6 +1196,69 @@ function DriverDetailModal({
               ) : (
                 <p className="text-center text-gray-500 py-8">No documents uploaded</p>
               )}
+
+              {/* Passbook / cancelled-cheque sits with the documents (not buried
+                  in the bank box) so it reviews like any other uploaded file. */}
+              {driver.driverProfile?.bankDetails?.passbookUrl && (
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <FileText className="w-5 h-5 text-gray-400" />
+                    <div className="min-w-0">
+                      <div className="font-medium">Passbook / Cheque</div>
+                      <div className="text-xs text-gray-500">Bank document</div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <a
+                      href={driver.driverProfile.bankDetails.passbookUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-secondary btn-sm"
+                    >
+                      <ExternalLink className="w-3 h-3 mr-1" /> View
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* Bank / payout details live in driverProfile.bankDetails,
+                  separate from the verifiable document list — surface them
+                  here too (including the passbook / cancelled-cheque file). */}
+              {(() => {
+                const bank = driver.driverProfile?.bankDetails;
+                const hasBank =
+                  !!bank &&
+                  !!(bank.accountHolder || bank.bankName || bank.accountNumber || bank.ifsc || bank.passbookUrl);
+                return (
+                  <div className="border-t border-gray-100 pt-4 mt-2">
+                    <div className="text-sm font-semibold text-gray-700 mb-2">Bank details</div>
+                    {hasBank ? (
+                      <div className="p-3 bg-gray-50 rounded-lg">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <div>
+                            <span className="text-gray-500">Account holder: </span>
+                            {bank?.accountHolder || '—'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Bank: </span>
+                            {bank?.bankName || '—'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">Account no.: </span>
+                            {bank?.accountNumber || '—'}
+                          </div>
+                          <div>
+                            <span className="text-gray-500">IFSC: </span>
+                            {bank?.ifsc || '—'}
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">No bank details submitted.</p>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 

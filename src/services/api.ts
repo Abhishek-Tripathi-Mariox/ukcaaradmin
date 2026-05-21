@@ -210,6 +210,12 @@ export const ridesAPI = {
       // a `refundAmount` arg without touching the backend.
     }),
   
+  // Cancel a shuttle seat reservation (scheduled-tab rows with a `sched_`
+  // prefixed id). The backend tolerates the prefix and records an
+  // admin-attributed cancellation reason. Refunds aren't processed here.
+  cancelScheduledBooking: (bookingId: string, reason: string) =>
+    api.put(`/admin/rides/scheduled/${bookingId}/cancel`, { reason }),
+
   reassign: (id: string, newDriverId: string, reason: string) =>
     api.put(`/admin/rides/${id}/reassign`, { driverId: newDriverId, reason }),
 
@@ -309,6 +315,34 @@ export const walletsAPI = {
   
   adjustBalance: (userId: string, amount: number, type: 'credit' | 'debit', reason: string) =>
     api.post(`/admin/wallets/${userId}/adjust`, { amount, type, reason }),
+};
+
+// ════════════════════════════════════════════════════════════════════
+// RECHARGE OFFERS API (wallet top-up denominations for the customer app)
+// ════════════════════════════════════════════════════════════════════
+
+export interface RechargeOffer {
+  _id: string;
+  amount: number;
+  bonusAmount: number;
+  discountPercent: number;
+  label?: string;
+  isPopular: boolean;
+  isActive: boolean;
+  order: number;
+  validFrom?: string;
+  validUntil?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const rechargeOffersAPI = {
+  list: (params?: { isActive?: boolean }) =>
+    api.get('/admin/recharge-offers', { params }),
+  create: (data: Partial<RechargeOffer>) => api.post('/admin/recharge-offers', data),
+  update: (id: string, data: Partial<RechargeOffer>) =>
+    api.patch(`/admin/recharge-offers/${id}`, data),
+  remove: (id: string) => api.delete(`/admin/recharge-offers/${id}`),
 };
 
 // ════════════════════════════════════════════════════════════════════
