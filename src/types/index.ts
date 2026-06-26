@@ -141,6 +141,7 @@ export interface Payment {
   status: 'pending' | 'completed' | 'failed' | 'refunded';
   method: 'card' | 'cash' | 'wallet' | 'bank_transfer';
   stripePaymentId?: string;
+  description?: string;
   createdAt: string;
 }
 

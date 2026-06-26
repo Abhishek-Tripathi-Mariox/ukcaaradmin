@@ -528,6 +528,11 @@ function TicketDetail({
   const q = useQuery({
     queryKey: ['support-ticket', ticketId],
     queryFn: async () => (await supportAPI.get(ticketId)).data.data as Ticket,
+    // Poll so customer replies appear while the admin has the ticket open
+    // (the customer thread mirrors this). Also refetch when the admin returns
+    // to the tab.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
   });
   const ticket = q.data;
   // Once support closes a ticket it's terminal — lock every control so it

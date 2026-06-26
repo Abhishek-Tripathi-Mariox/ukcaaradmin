@@ -1,6 +1,6 @@
-import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { referralsAPI } from '@/services/api';
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { referralsAPI, settingsAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
 import { PageHeader, StatCard, LoadingSpinner, RefreshButton } from '@/components/common';
@@ -55,6 +55,24 @@ export default function ReferralsPage() {
 
   const summary = data?.summary ?? { totalReferrers: 0, totalReferred: 0, totalEarnings: 0 };
   const referrers = data?.referrers ?? [];
+
+  // ── Referral program settings (admin-configurable joiner bonus) ──
+  const [bonus, setBonus] = useState('');
+  const settingsQ = useQuery({
+    queryKey: ['referral-settings'],
+    queryFn: async () => (await settingsAPI.getGeneral()).data?.data ?? {},
+  });
+  useEffect(() => {
+    if (settingsQ.data?.referralBonus !== undefined) {
+      setBonus(String(settingsQ.data.referralBonus ?? 0));
+    }
+  }, [settingsQ.data]);
+
+  const saveBonusMut = useMutation({
+    mutationFn: () => settingsAPI.updateGeneral({ referralBonus: Number(bonus) || 0 }),
+    onSuccess: () => toast.success('Referral bonus updated'),
+    onError: () => toast.error('Failed to update referral bonus'),
+  });
 
   const copyCode = (code?: string) => {
     if (!code) return;
@@ -178,6 +196,35 @@ export default function ReferralsPage() {
           icon={<IndianRupee className="w-6 h-6" />}
           color="purple"
         />
+      </div>
+
+      {/* Referral program settings */}
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
+        <h3 className="text-lg font-semibold mb-1">Referral Program</h3>
+        <p className="text-sm text-gray-500 mb-4">
+          Wallet bonus (₹) credited to a customer when they apply someone's referral code.
+          Set to 0 to disable the bonus (codes still link referrals).
+        </p>
+        <div className="flex items-end gap-3 max-w-md">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Joiner bonus (₹)</label>
+            <input
+              type="number"
+              min={0}
+              value={bonus}
+              onChange={(e) => setBonus(e.target.value)}
+              className="input"
+              placeholder="0"
+            />
+          </div>
+          <button
+            onClick={() => saveBonusMut.mutate()}
+            disabled={saveBonusMut.isPending || settingsQ.isLoading}
+            className="btn btn-primary"
+          >
+            {saveBonusMut.isPending ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </div>
 
       {/* Search */}

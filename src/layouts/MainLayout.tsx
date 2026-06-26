@@ -17,6 +17,7 @@ import {
   ChevronDown,
   ChevronRight,
   MessageSquare,
+  MessageCircle,
   ShieldCheck,
   ScrollText,
   Radar,
@@ -30,6 +31,12 @@ import {
   Share2,
   HelpCircle,
   Wallet,
+  FileText,
+  FileDown,
+  Crown,
+  Gift,
+  Award,
+  MailPlus,
 } from 'lucide-react';
 import clsx from 'clsx';
 
@@ -71,7 +78,7 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Users', href: '/users', icon: Users, perm: PERMISSIONS.VIEW_USERS },
       { name: 'Drivers', href: '/drivers', icon: Car, perm: PERMISSIONS.VIEW_DRIVERS },
-      // { name: 'Chat Support', href: '/chat', icon: MessageSquare, perm: PERMISSIONS.VIEW_CHATS },
+      { name: 'Chat Support', href: '/chat', icon: MessageCircle, perm: PERMISSIONS.VIEW_CHATS },
       { name: 'Support', href: '/support', icon: MessageSquare, perm: PERMISSIONS.VIEW_TICKETS },
     ],
   },
@@ -81,10 +88,10 @@ const navGroups: NavGroup[] = [
     items: [
       { name: 'Payments', href: '/payments', icon: CreditCard, perm: PERMISSIONS.VIEW_PAYMENTS },
       { name: 'Settlements', href: '/settlements', icon: Receipt, perm: PERMISSIONS.VIEW_SETTLEMENTS },
-      // { name: 'Invoices', href: '/invoices', icon: FileText, perm: PERMISSIONS.MANAGE_INVOICES },
+      { name: 'Invoices', href: '/invoices', icon: FileText, perm: PERMISSIONS.MANAGE_INVOICES },
       { name: 'Subscriptions', href: '/subscriptions', icon: Repeat, perm: PERMISSIONS.VIEW_PAYMENTS },
       { name: 'Fare Calculation', href: '/fare-calculation', icon: Calculator, perm: PERMISSIONS.VIEW_SETTINGS },
-      // { name: 'Exports', href: '/exports', icon: FileDown, perm: PERMISSIONS.EXPORT_REPORTS },
+      { name: 'Exports', href: '/exports', icon: FileDown, perm: PERMISSIONS.EXPORT_REPORTS },
     ],
   },
   {
@@ -94,11 +101,11 @@ const navGroups: NavGroup[] = [
       { name: 'Promo Codes', href: '/promos', icon: Tag, perm: PERMISSIONS.VIEW_PROMOS },
       { name: 'Recharge Offers', href: '/recharge-offers', icon: Wallet, perm: PERMISSIONS.VIEW_PROMOS },
       { name: 'Referrals', href: '/referrals', icon: Share2, perm: PERMISSIONS.VIEW_REFERRALS },
-      // { name: 'OnePass', href: '/onepass', icon: Crown, perm: PERMISSIONS.VIEW_ONEPASS },
-      // { name: 'Loyalty', href: '/loyalty', icon: Gift, perm: PERMISSIONS.VIEW_LOYALTY },
-      // { name: 'Incentives', href: '/incentives', icon: Award, perm: PERMISSIONS.VIEW_INCENTIVES },
+      { name: 'OnePass', href: '/onepass', icon: Crown, perm: PERMISSIONS.VIEW_ONEPASS },
+      { name: 'Loyalty', href: '/loyalty', icon: Gift, perm: PERMISSIONS.VIEW_LOYALTY },
+      { name: 'Incentives', href: '/incentives', icon: Award, perm: PERMISSIONS.VIEW_INCENTIVES },
       { name: 'Notifications', href: '/notifications', icon: Bell, perm: PERMISSIONS.SEND_NOTIFICATIONS },
-      // { name: 'Notif. Templates', href: '/notification-templates', icon: MailPlus, perm: PERMISSIONS.VIEW_NOTIFICATION_TEMPLATES },
+      { name: 'Notif. Templates', href: '/notification-templates', icon: MailPlus, perm: PERMISSIONS.VIEW_NOTIFICATION_TEMPLATES },
     ],
   },
   {

@@ -16,21 +16,22 @@ export default function ChatPage() {
     queryKey: ['chat', rideId],
     queryFn: async () => {
       if (!rideId) return null;
+      // Backend returns { data: { chat } } with messages embedded on the chat.
       const res = await chatAPI.getByRideId(rideId);
-      return res.data.data;
+      return res.data.data.chat;
     },
     enabled: !!rideId,
   });
 
-  const { data: messages, isLoading: messagesLoading } = useQuery({
-    queryKey: ['chat', 'messages', selectedChat?._id],
-    queryFn: async () => {
-      if (!selectedChat) return [];
-      const res = await chatAPI.getMessages(selectedChat._id);
-      return res.data.data;
-    },
-    enabled: !!selectedChat?._id,
+  // Map participant id → role so we can tell customer vs driver bubbles.
+  // The chat endpoint populates `participants` (with role) but leaves each
+  // message's `sender` as a raw id.
+  const roleById: Record<string, string> = {};
+  (selectedChat?.participants ?? []).forEach((p: any) => {
+    if (p?._id) roleById[String(p._id)] = p.role;
   });
+
+  const messages: any[] = selectedChat?.messages ?? [];
 
   const handleSearch = () => {
     if (rideId) {
@@ -115,48 +116,45 @@ export default function ChatPage() {
         size="lg"
       >
         <div className="h-96 overflow-y-auto">
-          {messagesLoading ? (
-            <LoadingSpinner />
-          ) : messages && messages.length > 0 ? (
+          {messages.length > 0 ? (
             <div className="space-y-4">
-              {messages.map((msg: any, index: number) => (
-                <div
-                  key={index}
-                  className={clsx(
-                    'flex gap-3',
-                    msg.senderType === 'customer' ? 'justify-start' : 'justify-end'
-                  )}
-                >
-                  {msg.senderType === 'customer' && (
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-blue-600" />
-                    </div>
-                  )}
+              {messages.map((msg: any, index: number) => {
+                const senderRole = roleById[String(msg.sender)] ?? 'driver';
+                const isCustomer = senderRole === 'customer';
+                return (
                   <div
-                    className={clsx(
-                      'max-w-[70%] rounded-lg p-3',
-                      msg.senderType === 'customer'
-                        ? 'bg-gray-100 text-gray-900'
-                        : 'bg-primary-600 text-white'
-                    )}
+                    key={msg._id ?? index}
+                    className={clsx('flex gap-3', isCustomer ? 'justify-start' : 'justify-end')}
                   >
-                    <div className="text-sm">{msg.message}</div>
+                    {isCustomer && (
+                      <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-blue-600" />
+                      </div>
+                    )}
                     <div
                       className={clsx(
-                        'text-xs mt-1',
-                        msg.senderType === 'customer' ? 'text-gray-500' : 'text-primary-200'
+                        'max-w-[70%] rounded-lg p-3',
+                        isCustomer ? 'bg-gray-100 text-gray-900' : 'bg-primary-600 text-white'
                       )}
                     >
-                      {format(new Date(msg.createdAt), 'HH:mm')}
+                      <div className="text-sm">{msg.content}</div>
+                      <div
+                        className={clsx(
+                          'text-xs mt-1',
+                          isCustomer ? 'text-gray-500' : 'text-primary-200'
+                        )}
+                      >
+                        {msg.createdAt && format(new Date(msg.createdAt), 'HH:mm')}
+                      </div>
                     </div>
+                    {!isCustomer && (
+                      <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
+                        <User className="w-4 h-4 text-primary-600" />
+                      </div>
+                    )}
                   </div>
-                  {msg.senderType === 'driver' && (
-                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <User className="w-4 h-4 text-primary-600" />
-                    </div>
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="flex items-center justify-center h-full text-gray-500">

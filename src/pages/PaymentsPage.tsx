@@ -96,6 +96,18 @@ export default function PaymentsPage() {
     onError: () => toast.error('Failed to adjust wallet'),
   });
 
+  // Fetches the full payment record (GET /admin/payments/:id) when the
+  // details modal opens. Falls back to the row data while loading.
+  const { data: paymentDetail, isFetching: detailLoading } = useQuery({
+    queryKey: ['payment', selectedPayment?._id],
+    queryFn: async () => {
+      const res = await paymentsAPI.getById(selectedPayment!._id);
+      return res.data.data.payment as Payment;
+    },
+    enabled: showDetails && !!selectedPayment?._id,
+  });
+  const detail = paymentDetail ?? selectedPayment;
+
   const getPaymentTypeIcon = (type: string) => {
     switch (type) {
       case 'ride_payment':
@@ -398,34 +410,37 @@ export default function PaymentsPage() {
         title="Payment Details"
         size="lg"
       >
-        {selectedPayment && (
+        {detail && (
           <div className="space-y-6">
+            {detailLoading && (
+              <div className="text-xs text-gray-400">Refreshing…</div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                {getPaymentTypeIcon(selectedPayment.type)}
+                {getPaymentTypeIcon(detail.type)}
                 <div>
                   <div className="text-lg font-semibold">
-                    #{selectedPayment._id.slice(-8).toUpperCase()}
+                    #{detail._id.slice(-8).toUpperCase()}
                   </div>
                   <div className="text-sm text-gray-500 capitalize">
-                    {selectedPayment.type.replace(/_/g, ' ')}
+                    {detail.type.replace(/_/g, ' ')}
                   </div>
                 </div>
               </div>
-              <StatusBadge status={selectedPayment.status} />
+              <StatusBadge status={detail.status} />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="text-sm text-gray-500">Amount</div>
                 <div className="text-2xl font-bold">
-                  ₹{selectedPayment.amount.toFixed(2)}
+                  ₹{detail.amount.toFixed(2)}
                 </div>
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="text-sm text-gray-500">Method</div>
                 <div className="text-2xl font-bold capitalize">
-                  {selectedPayment.method}
+                  {detail.method}
                 </div>
               </div>
             </div>
@@ -436,29 +451,26 @@ export default function PaymentsPage() {
                 <div>
                   <span className="text-gray-500">Name:</span>
                   <span className="ml-2">
-                    {selectedPayment.user?.firstName} {selectedPayment.user?.lastName}
+                    {detail.user?.firstName} {detail.user?.lastName}
                   </span>
                 </div>
                 <div>
                   <span className="text-gray-500">Email:</span>
-                  <span className="ml-2">{selectedPayment.user?.email}</span>
+                  <span className="ml-2">{detail.user?.email}</span>
                 </div>
               </div>
             </div>
 
-            {selectedPayment.stripePaymentId && (
+            {detail.description && (
               <div className="border-t pt-4">
-                <h4 className="font-medium text-gray-900 mb-2">Stripe Details</h4>
-                <div className="text-sm">
-                  <span className="text-gray-500">Payment ID:</span>
-                  <span className="ml-2 font-mono">{selectedPayment.stripePaymentId}</span>
-                </div>
+                <h4 className="font-medium text-gray-900 mb-2">Description</h4>
+                <div className="text-sm text-gray-700">{detail.description}</div>
               </div>
             )}
 
             <div className="border-t pt-4">
               <div className="text-sm text-gray-500">
-                Created: {format(new Date(selectedPayment.createdAt), 'PPpp')}
+                Created: {format(new Date(detail.createdAt), 'PPpp')}
               </div>
             </div>
           </div>

@@ -15,6 +15,7 @@ import {
   DollarSign,
   ToggleLeft,
   ToggleRight,
+  BarChart3,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -26,6 +27,7 @@ export default function PromosPage() {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [selectedPromo, setSelectedPromo] = useState<PromoCode | null>(null);
   const [showDetails, setShowDetails] = useState(false);
+  const [showUsage, setShowUsage] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -54,6 +56,32 @@ export default function PromosPage() {
         pagination: res.data?.data?.pagination ?? null,
       };
     },
+  });
+
+  // Usage breakdown (GET /admin/promos/:id/usage) — loaded when the Usage
+  // modal is open for the selected promo.
+  const { data: usage, isFetching: usageLoading } = useQuery({
+    queryKey: ['promo-usage', selectedPromo?._id],
+    queryFn: async () => {
+      const res = await promoAPI.getUsage(selectedPromo!._id);
+      return res.data.data as {
+        summary: {
+          uses: number;
+          usedCount: number;
+          totalDiscount: number;
+          uniqueCustomers: number;
+          remainingUses: number;
+        };
+        recent: Array<{
+          _id: string;
+          customer?: { firstName?: string; lastName?: string; phone?: string };
+          discount: number;
+          status: string;
+          createdAt: string;
+        }>;
+      };
+    },
+    enabled: showUsage && !!selectedPromo?._id,
   });
 
   const createMutation = useMutation({
@@ -217,6 +245,17 @@ export default function PromosPage() {
             title="View Details"
           >
             <Eye className="w-4 h-4 text-gray-500" />
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedPromo(promo);
+              setShowUsage(true);
+            }}
+            className="p-2 hover:bg-gray-100 rounded-lg"
+            title="Usage"
+          >
+            <BarChart3 className="w-4 h-4 text-indigo-500" />
           </button>
           <button
             onClick={(e) => {
@@ -403,6 +442,70 @@ export default function PromosPage() {
               </div>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Promo Usage Modal */}
+      <Modal
+        isOpen={showUsage}
+        onClose={() => setShowUsage(false)}
+        title={`Usage — ${selectedPromo?.code ?? ''}`}
+        size="lg"
+      >
+        {usageLoading && !usage ? (
+          <LoadingSpinner />
+        ) : usage ? (
+          <div className="space-y-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm text-gray-500">Total Uses</div>
+                <div className="text-lg font-semibold">{usage.summary.uses}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm text-gray-500">Total Discount</div>
+                <div className="text-lg font-semibold">₹{usage.summary.totalDiscount.toFixed(2)}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm text-gray-500">Unique Customers</div>
+                <div className="text-lg font-semibold">{usage.summary.uniqueCustomers}</div>
+              </div>
+              <div className="bg-gray-50 rounded-lg p-4">
+                <div className="text-sm text-gray-500">Remaining Uses</div>
+                <div className="text-lg font-semibold">{usage.summary.remainingUses}</div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <h4 className="font-medium text-gray-900 mb-3">Recent Redemptions</h4>
+              {usage.recent.length === 0 ? (
+                <div className="text-sm text-gray-500">No redemptions yet.</div>
+              ) : (
+                <div className="space-y-2">
+                  {usage.recent.map((r) => (
+                    <div
+                      key={r._id}
+                      className="flex items-center justify-between text-sm border-b border-gray-100 pb-2"
+                    >
+                      <div>
+                        <div className="font-medium">
+                          {r.customer?.firstName} {r.customer?.lastName}
+                        </div>
+                        <div className="text-gray-500">{r.customer?.phone}</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-medium text-green-600">-₹{r.discount?.toFixed(2)}</div>
+                        <div className="text-gray-400">
+                          {format(new Date(r.createdAt), 'MMM d, yyyy HH:mm')}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="text-sm text-gray-500">No usage data.</div>
         )}
       </Modal>
 

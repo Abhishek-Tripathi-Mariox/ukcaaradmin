@@ -75,7 +75,7 @@ export const dashboardAPI = {
     api.get(`/admin/analytics/revenue?period=${period}`),
   
   exportReport: (type: string, startDate: string, endDate: string) =>
-    api.get(`/admin/reports/export?type=${type}&startDate=${startDate}&endDate=${endDate}`),
+    api.get(`/admin/exports/${type}`, { params: { startDate, endDate } }),
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -195,7 +195,7 @@ export const ridesAPI = {
   getLive: () => api.get('/admin/rides/live'),
   
   getHeatmap: (params?: { startDate?: string; endDate?: string }) =>
-    api.get('/admin/rides/heatmap', { params }),
+    api.get('/admin/heatmap', { params }),
   
   // Backend exposes PUT /admin/rides/:id/cancel and accepts a boolean `refund`
   // plus an optional `refundAmount`. We translate the legacy `refundPercentage`
@@ -247,10 +247,10 @@ export const ridesAPI = {
     api.post(`/admin/rides/${rideId}/complete`),
   
   adjustFare: (id: string, newFare: number, reason: string) =>
-    api.patch(`/admin/rides/${id}/fare`, { newFare, reason }),
+    api.put(`/admin/rides/${id}/adjust-fare`, { newFare, reason }),
   
   getDisputes: (params?: RideListParams) =>
-    api.get('/admin/rides/disputes', { params }),
+    api.get('/admin/rides/disputed', { params }),
   
   resolveDispute: (rideId: string, resolution: string, refundAmount?: number, notes?: string) =>
     api.post(`/admin/rides/${rideId}/resolve-dispute`, { resolution, refundAmount, notes }),
@@ -298,7 +298,7 @@ export const paymentsAPI = {
   getById: (id: string) => api.get(`/admin/payments/${id}`),
   
   refund: (id: string, amount: number, reason: string) =>
-    api.post(`/admin/payments/${id}/refund`, { amount, reason }),
+    api.post('/admin/payments/refund', { paymentId: id, amount, reason }),
   
   getPendingPayouts: () => api.get('/admin/payments/payouts/pending'),
   
@@ -350,9 +350,9 @@ export const rechargeOffersAPI = {
 // ════════════════════════════════════════════════════════════════════
 
 export const chatAPI = {
-  getByRideId: (rideId: string) => api.get(`/admin/chats/ride/${rideId}`),
-  
-  getMessages: (chatId: string) => api.get(`/admin/chats/${chatId}/messages`),
+  // Returns the chat document for a ride with its `messages` array embedded —
+  // there is no separate messages endpoint.
+  getByRideId: (rideId: string) => api.get(`/admin/chats/${rideId}`),
 };
 
 // ════════════════════════════════════════════════════════════════════
