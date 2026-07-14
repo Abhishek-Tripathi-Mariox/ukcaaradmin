@@ -2,12 +2,11 @@ import { useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { usersAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
-import { Modal, ConfirmModal } from '@/components/Modal';
+import { Modal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import {
   Search,
   Eye,
-  Ban,
   CheckCircle,
   ToggleLeft,
   ToggleRight,

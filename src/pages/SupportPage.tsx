@@ -12,12 +12,8 @@ import {
   Search,
   UserCheck,
   Tag,
-  Calendar,
-  User as UserIcon,
   FileText,
   Send,
-  Check,
-  ShieldAlert,
 } from 'lucide-react';
 import { supportAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';

@@ -7,7 +7,7 @@ import {
   fuelTypesAPI,
   CatalogueType,
 } from '@/services/api';
-import { Modal, ConfirmModal } from '@/components/Modal';
+import { Modal } from '@/components/Modal';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
 type Tab = 'vehicle' | 'fuel';
@@ -97,7 +97,6 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
   const qc = useQueryClient();
   const [editing, setEditing] = useState<CatalogueType | null>(null);
   const [creating, setCreating] = useState(false);
-  const [deleting, setDeleting] = useState<CatalogueType | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: [queryKey],
