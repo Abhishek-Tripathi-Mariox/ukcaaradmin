@@ -176,6 +176,7 @@ export default function UsersPage() {
     {
       key: 'actions',
       header: 'Actions',
+      render: (user: User) => (
         <div className="flex items-center gap-2">
           <button
             type="button"
