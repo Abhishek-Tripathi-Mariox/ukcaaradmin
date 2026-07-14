@@ -28,6 +28,56 @@ import type { Ride } from '@/types';
 
 type TabType = 'all' | 'scheduled' | 'live' | 'disputes';
 
+function NumInput({
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  className = 'input',
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: string;
+  className?: string;
+}) {
+  const [text, setText] = useState<string>(String(value ?? 0));
+  const [prevVal, setPrevVal] = useState<number>(value);
+
+  if (value !== prevVal) {
+    setPrevVal(value);
+    setText(String(value ?? 0));
+  }
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const parsed = parseFloat(e.target.value);
+        if (!isNaN(parsed)) {
+          onChange(parsed);
+        } else if (e.target.value === '') {
+          onChange(0);
+        }
+      }}
+      onBlur={() => {
+        const parsed = parseFloat(text);
+        const finalVal = isNaN(parsed) ? 0 : parsed;
+        setText(String(finalVal));
+        onChange(finalVal);
+      }}
+      className={className}
+    />
+  );
+}
+
 export default function RidesPage() {
   // Honour a ?tab= deep-link (e.g. the dashboard's "Live Rides" → ?tab=live
   // and "Disputes" → ?tab=disputes quick actions). Falls back to "all".
@@ -185,10 +235,12 @@ export default function RidesPage() {
     if (statusFilter) params.status = statusFilter;
     if (rideTypeFilter) params.rideType = rideTypeFilter;
     if (paymentFilter) params.paymentMethod = paymentFilter;
-    if (startDate) params.startDate = startDate;
-    // Stretch the end date to the end of the chosen day so the whole day is
-    // inclusive rather than cutting off at midnight.
-    if (endDate) params.endDate = `${endDate}T23:59:59.999`;
+    if (startDate) {
+      params.startDate = new Date(`${startDate}T00:00:00`).toISOString();
+    }
+    if (endDate) {
+      params.endDate = new Date(`${endDate}T23:59:59.999`).toISOString();
+    }
     if (debouncedText.minFare) params.minFare = Number(debouncedText.minFare);
     if (debouncedText.maxFare) params.maxFare = Number(debouncedText.maxFare);
     return params;
@@ -1146,10 +1198,9 @@ export default function RidesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Refund Percentage
               </label>
-              <input
-                type="number"
+              <NumInput
                 value={refundPercentage}
-                onChange={(e) => setRefundPercentage(Number(e.target.value))}
+                onChange={setRefundPercentage}
                 className="input"
                 min={0}
                 max={100}
@@ -1157,21 +1208,22 @@ export default function RidesPage() {
             </div>
           )}
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowCancelModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowCancelModal(false)} className="btn btn-secondary">
               Close
             </button>
             <button
+              type="button"
               onClick={() => {
-                if (selectedRide && cancelReason) {
+                if (selectedRide && cancelReason.trim()) {
                   cancelMutation.mutate({
                     id: selectedRide._id,
-                    reason: cancelReason,
+                    reason: cancelReason.trim(),
                     refundPct: refundPercentage,
                   });
                 }
               }}
               className="btn btn-danger"
-              disabled={!cancelReason || cancelMutation.isPending}
+              disabled={!cancelReason.trim() || cancelMutation.isPending}
             >
               Cancel Ride
             </button>
@@ -1215,21 +1267,22 @@ export default function RidesPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowReassignModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowReassignModal(false)} className="btn btn-secondary">
               Close
             </button>
             <button
+              type="button"
               onClick={() => {
-                if (selectedRide && newDriverId && reassignReason) {
+                if (selectedRide && newDriverId.trim() && reassignReason.trim()) {
                   reassignMutation.mutate({
                     id: selectedRide._id,
-                    driverId: newDriverId,
-                    reason: reassignReason,
+                    driverId: newDriverId.trim(),
+                    reason: reassignReason.trim(),
                   });
                 }
               }}
               className="btn btn-primary"
-              disabled={!newDriverId || !reassignReason || reassignMutation.isPending}
+              disabled={!newDriverId.trim() || !reassignReason.trim() || reassignMutation.isPending}
             >
               Reassign
             </button>
@@ -1432,10 +1485,9 @@ export default function RidesPage() {
             <label className="block text-sm font-medium text-gray-700 mb-1">
               New Fare *
             </label>
-            <input
-              type="number"
+            <NumInput
               value={newFare}
-              onChange={(e) => setNewFare(Number(e.target.value))}
+              onChange={setNewFare}
               className="input"
               step="0.01"
               min={0}
@@ -1454,21 +1506,22 @@ export default function RidesPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowFareModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowFareModal(false)} className="btn btn-secondary">
               Close
             </button>
             <button
+              type="button"
               onClick={() => {
-                if (selectedRide && fareReason) {
+                if (selectedRide && fareReason.trim()) {
                   adjustFareMutation.mutate({
                     id: selectedRide._id,
                     fare: newFare,
-                    reason: fareReason,
+                    reason: fareReason.trim(),
                   });
                 }
               }}
               className="btn btn-primary"
-              disabled={!fareReason || adjustFareMutation.isPending}
+              disabled={!fareReason.trim() || newFare < 0 || adjustFareMutation.isPending}
             >
               Adjust Fare
             </button>
@@ -1516,10 +1569,9 @@ export default function RidesPage() {
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Refund Amount
               </label>
-              <input
-                type="number"
+              <NumInput
                 value={refundAmount}
-                onChange={(e) => setRefundAmount(Number(e.target.value))}
+                onChange={setRefundAmount}
                 className="input"
                 step="0.01"
                 min={0}
@@ -1540,17 +1592,18 @@ export default function RidesPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowDisputeModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowDisputeModal(false)} className="btn btn-secondary">
               Close
             </button>
             <button
+              type="button"
               onClick={() => {
                 if (selectedRide && disputeResolution) {
                   resolveDisputeMutation.mutate({
                     id: selectedRide._id,
                     resolution: disputeResolution,
                     refund: refundAmount || undefined,
-                    notes: disputeNotes || undefined,
+                    notes: disputeNotes?.trim() || undefined,
                   });
                 }
               }}

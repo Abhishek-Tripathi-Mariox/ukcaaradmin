@@ -503,7 +503,10 @@ export const financeAPI = {
 
   getInvoice: (id: string) => api.get(`/admin/invoices/${id}`),
 
-  invoicePdfUrl: (id: string) => `${API_BASE_URL}/admin/invoices/${id}/pdf`,
+  invoicePdfUrl: (id: string) => {
+    const token = useAuthStore.getState().token;
+    return `${API_BASE_URL}/admin/invoices/${id}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+  },
 
   createCustomerInvoice: (data: {
     rideId: string;

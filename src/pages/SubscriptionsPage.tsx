@@ -314,9 +314,31 @@ export default function SubscriptionsPage() {
   }
 
   function handleSavePlan() {
-    if (!planForm.name.trim()) { toast.error('Plan name is required'); return; }
+    if (!planForm.name.trim()) {
+      toast.error('Plan name is required');
+      return;
+    }
+    const price = Number(planForm.price);
+    if (isNaN(price) || price < 0) {
+      toast.error('Upfront price cannot be negative');
+      return;
+    }
+    const commissionRate = Number(planForm.commissionRate);
+    if (isNaN(commissionRate) || commissionRate < 0 || commissionRate > 100) {
+      toast.error('Commission rate must be between 0 and 100%');
+      return;
+    }
+    const validityDays = Number(planForm.validityDays);
+    if (isNaN(validityDays) || validityDays < 1) {
+      toast.error('Validity days must be at least 1');
+      return;
+    }
     const payload = {
       ...planForm,
+      name: planForm.name.trim(),
+      price: Math.max(0, price),
+      commissionRate: Math.min(100, Math.max(0, commissionRate)),
+      validityDays: Math.max(1, validityDays),
       benefits: planForm.benefits.filter((b) => b.trim()),
     };
     savePlanMutation.mutate(payload);

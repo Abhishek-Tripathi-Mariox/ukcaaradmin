@@ -226,12 +226,13 @@ export default function DashboardPage() {
                 <XAxis dataKey="date" stroke="#94a3b8" fontSize={12} />
                 <YAxis stroke="#94a3b8" fontSize={12} />
                 <Tooltip
+                  cursor={{ fill: 'transparent' }}
                   contentStyle={{
                     backgroundColor: '#fff',
                     border: '1px solid #e2e8f0',
                     borderRadius: '8px',
                   }}
-                  formatter={(value: number) => [`₹${value.toFixed(2)}`, 'Revenue']}
+                  formatter={(value: any) => [`₹${Number(value || 0).toFixed(2)}`, 'Revenue']}
                 />
                 <Bar dataKey="revenue" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>

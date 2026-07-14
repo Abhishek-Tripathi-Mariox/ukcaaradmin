@@ -49,6 +49,56 @@ function calcFare(cfg: VehicleFareConfig, km: number, minutes: number): number {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
+function NumInput({
+  value,
+  onChange,
+  min = 0,
+  max,
+  step = 0.5,
+  className = '',
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  className?: string;
+}) {
+  const [text, setText] = useState<string>(String(value ?? 0));
+  const [prevVal, setPrevVal] = useState<number>(value);
+
+  if (value !== prevVal) {
+    setPrevVal(value);
+    setText(String(value ?? 0));
+  }
+
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const parsed = parseFloat(e.target.value);
+        if (!isNaN(parsed)) {
+          onChange(parsed);
+        } else if (e.target.value === '') {
+          onChange(0);
+        }
+      }}
+      onBlur={() => {
+        const parsed = parseFloat(text);
+        const finalVal = isNaN(parsed) ? 0 : parsed;
+        setText(String(finalVal));
+        onChange(finalVal);
+      }}
+      className={className}
+    />
+  );
+}
+
 function FareRow({
   label,
   field,
@@ -73,12 +123,11 @@ function FareRow({
             {prefix}
           </span>
         )}
-        <input
-          type="number"
+        <NumInput
           min={0}
           step={step ?? 0.5}
           value={value}
-          onChange={(e) => onChange(field, parseFloat(e.target.value) || 0)}
+          onChange={(v) => onChange(field, v)}
           className={`w-full border border-gray-300 rounded-lg py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 pr-3 ${
             prefix ? 'pl-7' : 'pl-3'
           }`}
@@ -197,23 +246,21 @@ function FareCalculator({
       <div className="space-y-3 mb-5">
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Distance (km)</label>
-          <input
-            type="number"
+          <NumInput
             min={0}
             step={0.5}
             value={km}
-            onChange={(e) => setKm(parseFloat(e.target.value) || 0)}
+            onChange={setKm}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
         <div>
           <label className="text-xs font-medium text-gray-500 block mb-1">Duration (minutes)</label>
-          <input
-            type="number"
+          <NumInput
             min={0}
             step={1}
             value={minutes}
-            onChange={(e) => setMinutes(parseInt(e.target.value) || 0)}
+            onChange={setMinutes}
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
@@ -439,13 +486,12 @@ export default function FareCalculationPage() {
                   <label className="text-xs font-medium text-gray-500 block mb-1">
                     Platform Commission (%)
                   </label>
-                  <input
-                    type="number"
+                  <NumInput
                     min={0}
                     max={100}
                     step={1}
                     value={effectiveCommissionPct}
-                    onChange={(e) => setCommissionPct(parseFloat(e.target.value) || 0)}
+                    onChange={setCommissionPct}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">
@@ -456,12 +502,11 @@ export default function FareCalculationPage() {
                   <label className="text-xs font-medium text-gray-500 block mb-1">
                     Cancellation Fee (₹)
                   </label>
-                  <input
-                    type="number"
+                  <NumInput
                     min={0}
                     step={5}
                     value={effectiveCancellationFee}
-                    onChange={(e) => setCancellationFee(parseFloat(e.target.value) || 0)}
+                    onChange={setCancellationFee}
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">

@@ -158,9 +158,18 @@ export default function PromosPage() {
     setShowForm(true);
   };
 
-  const handleSubmit = () => {
-    const data: any = { ...formData };
-    if (!data.expiresAt) delete data.expiresAt;
+  const handleSubmit = (e?: any) => {
+    if (e && e.preventDefault) e.preventDefault();
+    if (e && e.stopPropagation) e.stopPropagation();
+
+    const data: any = {
+      ...formData,
+      minFare: Number(formData.minRideAmount) || 0,
+      minRideAmount: Number(formData.minRideAmount) || 0,
+      expiresAt: formData.expiresAt
+        ? new Date(formData.expiresAt).toISOString()
+        : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    };
     if (!data.maxDiscount) delete data.maxDiscount;
     if (!data.description) delete data.description;
 
@@ -648,6 +657,7 @@ export default function PromosPage() {
 
           <div className="flex justify-end gap-3 pt-4">
             <button
+              type="button"
               onClick={() => {
                 setShowForm(false);
                 resetForm();
@@ -657,7 +667,8 @@ export default function PromosPage() {
               Cancel
             </button>
             <button
-              onClick={handleSubmit}
+              type="button"
+              onClick={(e) => handleSubmit(e)}
               className="btn btn-primary"
               disabled={!formData.code || !formData.value || createMutation.isPending || updateMutation.isPending}
             >

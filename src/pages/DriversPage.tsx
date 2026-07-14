@@ -665,17 +665,18 @@ export default function DriversPage() {
             />
           </div>
           <div className="flex justify-end gap-2 border-t pt-3">
-            <button onClick={() => setShowRejectModal(false)} className="btn btn-secondary">
+            <button type="button" onClick={() => setShowRejectModal(false)} className="btn btn-secondary">
               Cancel
             </button>
             <button
+              type="button"
               onClick={() =>
                 selectedDriver &&
-                rejectReason &&
-                rejectMutation.mutate({ id: selectedDriver._id, reason: rejectReason })
+                rejectReason.trim() &&
+                rejectMutation.mutate({ id: selectedDriver._id, reason: rejectReason.trim() })
               }
               className="btn btn-danger"
-              disabled={!rejectReason || rejectMutation.isPending}
+              disabled={!rejectReason.trim() || rejectMutation.isPending}
             >
               {rejectMutation.isPending ? 'Rejecting…' : 'Reject'}
             </button>

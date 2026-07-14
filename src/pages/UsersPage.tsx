@@ -9,7 +9,8 @@ import {
   Eye,
   Ban,
   CheckCircle,
-  Trash2,
+  ToggleLeft,
+  ToggleRight,
   Mail,
   Phone,
   MapPin,
@@ -82,7 +83,6 @@ export default function UsersPage() {
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showDetails, setShowDetails] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [statusReason, setStatusReason] = useState('');
   const queryClient = useQueryClient();
 
@@ -108,16 +108,6 @@ export default function UsersPage() {
       setStatusReason('');
     },
     onError: () => toast.error('Failed to update status'),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => usersAPI.delete(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] });
-      toast.success('User deleted');
-      setShowDeleteModal(false);
-    },
-    onError: () => toast.error('Failed to delete user'),
   });
 
   const columns = [
@@ -186,9 +176,9 @@ export default function UsersPage() {
     {
       key: 'actions',
       header: 'Actions',
-      render: (user: User) => (
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
               setSelectedUser(user);
@@ -200,30 +190,22 @@ export default function UsersPage() {
             <Eye className="w-4 h-4 text-gray-500" />
           </button>
           <button
+            type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setSelectedUser(user);
-              setShowStatusModal(true);
+              updateStatusMutation.mutate({
+                id: user._id,
+                isActive: !user.isActive,
+              });
             }}
             className="p-2 hover:bg-gray-100 rounded-lg"
-            title={user.isActive ? 'Deactivate' : 'Activate'}
+            title={user.isActive ? 'Deactivate user' : 'Activate user'}
           >
             {user.isActive ? (
-              <Ban className="w-4 h-4 text-red-500" />
+              <ToggleRight className="w-5 h-5 text-green-600" />
             ) : (
-              <CheckCircle className="w-4 h-4 text-green-500" />
+              <ToggleLeft className="w-5 h-5 text-gray-400" />
             )}
-          </button>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedUser(user);
-              setShowDeleteModal(true);
-            }}
-            className="p-2 hover:bg-gray-100 rounded-lg"
-            title="Delete"
-          >
-            <Trash2 className="w-4 h-4 text-red-500" />
           </button>
         </div>
       ),
@@ -356,16 +338,6 @@ export default function UsersPage() {
         </div>
       </Modal>
 
-      <ConfirmModal
-        isOpen={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        onConfirm={() => selectedUser && deleteMutation.mutate(selectedUser._id)}
-        title="Delete User"
-        message={`Are you sure you want to delete ${displayName(selectedUser ?? {})}? This action cannot be undone.`}
-        confirmText="Delete"
-        variant="danger"
-        isLoading={deleteMutation.isPending}
-      />
     </div>
   );
 }

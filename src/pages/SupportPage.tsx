@@ -11,6 +11,13 @@ import {
   MessageSquare,
   Search,
   UserCheck,
+  Tag,
+  Calendar,
+  User as UserIcon,
+  FileText,
+  Send,
+  Check,
+  ShieldAlert,
 } from 'lucide-react';
 import { supportAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
@@ -524,19 +531,15 @@ function TicketDetail({
   const me = useAuthStore((s) => s.user);
   const [reply, setReply] = useState('');
   const [internal, setInternal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'conversation' | 'details'>('conversation');
 
   const q = useQuery({
     queryKey: ['support-ticket', ticketId],
     queryFn: async () => (await supportAPI.get(ticketId)).data.data as Ticket,
-    // Poll so customer replies appear while the admin has the ticket open
-    // (the customer thread mirrors this). Also refetch when the admin returns
-    // to the tab.
     refetchInterval: 15_000,
     refetchOnWindowFocus: true,
   });
   const ticket = q.data;
-  // Once support closes a ticket it's terminal — lock every control so it
-  // can't be reopened or edited. The backend rejects these too.
   const adminClosed = ticket?.status === 'closed' && ticket?.closedByRole === 'admin';
 
   const replyMut = useMutation({
@@ -570,247 +573,307 @@ function TicketDetail({
     onError: (e: any) => toast.error(e.response?.data?.message || 'Claim failed'),
   });
 
+  const statusLabels: Record<string, string> = {
+    open: 'Open',
+    in_progress: 'In Progress',
+    pending_user: 'Pending User Reply',
+    resolved: 'Resolved',
+    closed: 'Closed',
+  };
+
   return (
-    <Modal isOpen onClose={onClose} title={ticket?.ticketNumber ?? 'Ticket'} size="xl">
+    <Modal isOpen onClose={onClose} title={ticket ? `#${ticket.ticketNumber} • ${ticket.subject}` : 'Support Ticket'} size="xl">
       {q.isLoading || !ticket ? (
-        <div className="p-8 text-center text-gray-500">Loading…</div>
+        <div className="p-12 text-center text-gray-500">Loading ticket details…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Conversation */}
-          <div className="md:col-span-2 space-y-3">
-            <div>
-              <div className="text-lg font-semibold">{ticket.subject}</div>
-              <div className="text-xs text-gray-500">
-                Opened {format(new Date(ticket.createdAt), 'dd MMM yy HH:mm')} ·{' '}
-                {userName(ticket.submittedBy)} ({ticket.submittedByRole})
+        <div className="space-y-4">
+          {/* Top Banner Info Bar */}
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-bold text-sm">
+                {userName(ticket.submittedBy).charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900 text-sm flex items-center gap-2">
+                  <span>{userName(ticket.submittedBy)}</span>
+                  <span className="px-2 py-0.5 rounded-full text-[11px] font-medium uppercase bg-gray-200 text-gray-700">
+                    {ticket.submittedByRole}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  Opened {format(new Date(ticket.createdAt), 'dd MMM yyyy HH:mm')} ({formatDistanceToNow(new Date(ticket.createdAt), { addSuffix: true })})
+                </div>
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={ticket.status} variant={STATUS_VARIANT[ticket.status]} />
+              <span className="px-2.5 py-1 rounded-lg text-xs font-semibold capitalize bg-white border border-gray-200 text-gray-700">
+                {ticket.priority} priority
+              </span>
+            </div>
+          </div>
 
-            <div className="border border-gray-200 rounded-lg max-h-[420px] overflow-y-auto p-3 bg-gray-50 space-y-2">
-              {(ticket.messages ?? []).map((m, i) => {
-                const isAdmin = m.senderRole === 'admin';
-                const sender = typeof m.sender === 'object' ? m.sender : null;
-                return (
-                  <div
-                    key={m._id ?? i}
-                    className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}
-                  >
-                    <div
-                      className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
-                        m.internal
-                          ? 'bg-yellow-50 border border-yellow-300'
-                          : isAdmin
-                          ? 'bg-blue-100'
-                          : 'bg-white border border-gray-200'
-                      }`}
-                    >
-                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-2">
-                        <span>
-                          {sender ? userName(sender) : '—'}{' '}
-                          <span className="text-gray-400">· {m.senderRole}</span>
-                        </span>
-                        {m.internal && (
-                          <span className="text-yellow-700 text-[10px] uppercase font-semibold">
-                            internal
-                          </span>
-                        )}
-                        <span className="ml-auto text-gray-400">
-                          {format(new Date(m.createdAt), 'dd MMM HH:mm')}
-                        </span>
+          {/* Navigation Tabs */}
+          <div className="flex border-b border-gray-200">
+            <button
+              type="button"
+              onClick={() => setActiveTab('conversation')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'conversation'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <MessageSquare className="w-4 h-4" />
+              Conversation Thread ({ticket.messages?.length ?? 0})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === 'details'
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Tag className="w-4 h-4" />
+              Ticket Settings & Status
+            </button>
+          </div>
+
+          {activeTab === 'conversation' ? (
+            <div className="space-y-4">
+              {/* Messages timeline */}
+              <div className="border border-gray-200 rounded-xl max-h-[380px] overflow-y-auto p-4 bg-gray-50/60 space-y-3">
+                {(ticket.messages ?? []).length === 0 ? (
+                  <div className="text-center py-6 text-sm text-gray-400">No messages yet.</div>
+                ) : (
+                  (ticket.messages ?? []).map((m, i) => {
+                    const isAdmin = m.senderRole === 'admin';
+                    const sender = typeof m.sender === 'object' ? m.sender : null;
+                    return (
+                      <div
+                        key={m._id ?? i}
+                        className={`flex ${isAdmin ? 'justify-end' : 'justify-start'}`}
+                      >
+                        <div
+                          className={`max-w-[85%] rounded-xl px-4 py-3 text-sm shadow-sm ${
+                            m.internal
+                              ? 'bg-amber-50 border border-amber-300 text-amber-950'
+                              : isAdmin
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white border border-gray-200 text-gray-800'
+                          }`}
+                        >
+                          <div
+                            className={`text-xs mb-1.5 flex items-center justify-between gap-3 ${
+                              isAdmin && !m.internal ? 'text-blue-100' : 'text-gray-500'
+                            }`}
+                          >
+                            <span className="font-semibold flex items-center gap-1.5">
+                              {sender ? userName(sender) : 'Support Agent'}
+                              {m.internal && (
+                                <span className="px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded text-[10px] uppercase font-bold tracking-wide">
+                                  Internal Note
+                                </span>
+                              )}
+                            </span>
+                            <span className="text-[11px] opacity-80">
+                              {format(new Date(m.createdAt), 'dd MMM HH:mm')}
+                            </span>
+                          </div>
+                          <div className="whitespace-pre-wrap leading-relaxed">{m.body}</div>
+                        </div>
                       </div>
-                      <div className="whitespace-pre-wrap">{m.body}</div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {adminClosed ? (
-              <div className="border border-gray-200 rounded-lg p-3 bg-gray-50 text-sm text-gray-500">
-                This ticket was closed by support and is locked. The customer must
-                create a new ticket to continue.
-              </div>
-            ) : (
-              <div className="border border-gray-200 rounded-lg p-2 bg-white">
-                <textarea
-                  value={reply}
-                  onChange={(e) => setReply(e.target.value)}
-                  rows={3}
-                  placeholder={internal ? 'Internal note (not visible to user)' : 'Reply to user…'}
-                  className="w-full px-2 py-1 text-sm focus:outline-none resize-none"
-                />
-                <div className="flex items-center justify-between border-t border-gray-100 pt-2">
-                  <label className="flex items-center gap-1 text-xs text-gray-600">
-                    <input
-                      type="checkbox"
-                      checked={internal}
-                      onChange={(e) => setInternal(e.target.checked)}
-                    />
-                    Internal note
-                  </label>
-                  <button
-                    onClick={() => reply.trim() && replyMut.mutate()}
-                    disabled={!reply.trim() || replyMut.isPending}
-                    className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50 flex items-center gap-1"
-                  >
-                    <MessageSquare className="w-4 h-4" />
-                    {replyMut.isPending ? 'Sending…' : internal ? 'Save note' : 'Send reply'}
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-3 text-sm">
-            <Sidebar label="Status">
-              {ticket.status === 'closed' && ticket.closedByRole === 'admin' ? (
-                <div className="space-y-1">
-                  <StatusBadge status="closed" variant={STATUS_VARIANT.closed} />
-                  <p className="text-xs text-gray-500">
-                    Closed by support — this is permanent and can't be reopened.
-                    The customer must create a new ticket.
-                  </p>
-                </div>
-              ) : (
-                <select
-                  value={ticket.status}
-                  onChange={(e) => updateMut.mutate({ status: e.target.value })}
-                  className="w-full px-2 py-1 border border-gray-300 rounded text-sm"
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s.replace(/_/g, ' ')}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Sidebar>
-
-            <Sidebar label="Priority">
-              <select
-                value={ticket.priority}
-                disabled={adminClosed}
-                onChange={(e) => updateMut.mutate({ priority: e.target.value })}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:text-gray-400"
-              >
-                {PRIORITIES.map((p) => (
-                  <option key={p} value={p}>
-                    {p}
-                  </option>
-                ))}
-              </select>
-            </Sidebar>
-
-            <Sidebar label="Assignee">
-              {ticket.assignedTo ? (
-                <div className="text-sm">
-                  {userName(ticket.assignedTo)}
-                  {me && !adminClosed && (ticket.assignedTo as any)._id !== (me as any)._id && (
-                    <button
-                      onClick={() => claim.mutate()}
-                      className="ml-2 text-xs text-blue-600 hover:underline"
-                    >
-                      claim
-                    </button>
-                  )}
-                </div>
-              ) : (
-                <button
-                  onClick={() => claim.mutate()}
-                  disabled={adminClosed}
-                  className="px-2 py-1 border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Claim
-                </button>
-              )}
-            </Sidebar>
-
-            <Sidebar label="Category">
-              <span className="capitalize">{ticket.category.replace(/_/g, ' ')}</span>
-            </Sidebar>
-
-            {(ticket.tags ?? []).includes('doc-update') && (
-              <Sidebar label="Document update request">
-                <div className="text-xs space-y-1">
-                  <div>
-                    <span className="text-gray-500">Doc type: </span>
-                    <span className="font-medium capitalize">
-                      {(ticket.metadata?.docType as string)?.replace(/-/g, ' ') ?? '—'}
-                    </span>
-                  </div>
-                  {ticket.metadata?.newFileUrl ? (
-                    <a
-                      href={ticket.metadata.newFileUrl as string}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-600 hover:underline"
-                    >
-                      View proposed new file ↗
-                    </a>
-                  ) : (
-                    <div className="text-gray-500">No new file attached</div>
-                  )}
-                </div>
-              </Sidebar>
-            )}
-
-            {ticket.slaDueAt && (
-              <Sidebar label="SLA due">
-                {format(new Date(ticket.slaDueAt), 'dd MMM HH:mm')}
-                <div className="text-xs text-gray-500">
-                  {formatDistanceToNow(new Date(ticket.slaDueAt), { addSuffix: true })}
-                </div>
-              </Sidebar>
-            )}
-
-            {ticket.firstResponseAt && (
-              <Sidebar label="First response">
-                {format(new Date(ticket.firstResponseAt), 'dd MMM HH:mm')}
-              </Sidebar>
-            )}
-
-            {ticket.relatedRide && (
-              <Sidebar label="Related ride">
-                <span className="font-mono text-xs">{ticket.relatedRide._id}</span>
-              </Sidebar>
-            )}
-
-            {ticket.relatedPayment && (
-              <Sidebar label="Related payment">
-                <span className="font-mono text-xs">{ticket.relatedPayment._id}</span>
-                {ticket.relatedPayment.amount != null && (
-                  <div className="text-xs">₹{ticket.relatedPayment.amount}</div>
+                    );
+                  })
                 )}
-              </Sidebar>
-            )}
+              </div>
 
-            <Sidebar label="Resolution">
-              <textarea
-                defaultValue={ticket.resolution ?? ''}
-                disabled={adminClosed}
-                onBlur={(e) => {
-                  if (e.target.value !== (ticket.resolution ?? '')) {
-                    updateMut.mutate({ resolution: e.target.value });
-                  }
-                }}
-                rows={3}
-                className="w-full px-2 py-1 border border-gray-300 rounded text-sm disabled:bg-gray-100 disabled:text-gray-400"
-                placeholder="Notes on how this was resolved…"
-              />
-            </Sidebar>
-          </div>
+              {/* Reply or Locked banner */}
+              {adminClosed ? (
+                <div className="border border-gray-200 rounded-xl p-4 bg-gray-50 text-sm text-gray-600 flex items-center gap-3">
+                  <Lock className="w-5 h-5 text-gray-400 shrink-0" />
+                  <span>
+                    This ticket was closed by support and is locked. The customer must create a new ticket to continue.
+                  </span>
+                </div>
+              ) : (
+                <div className="border border-gray-200 rounded-xl p-3 bg-white shadow-sm space-y-3">
+                  <textarea
+                    value={reply}
+                    onChange={(e) => setReply(e.target.value)}
+                    rows={3}
+                    placeholder={
+                      internal
+                        ? 'Write an internal note (only visible to admin team)...'
+                        : 'Reply to customer...'
+                    }
+                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                  />
+                  <div className="flex items-center justify-between pt-1">
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={internal}
+                        onChange={(e) => setInternal(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>Internal Note (Hidden from Customer)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => reply.trim() && replyMut.mutate()}
+                      disabled={!reply.trim() || replyMut.isPending}
+                      className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-sm disabled:opacity-50 flex items-center gap-1.5"
+                    >
+                      <Send className="w-4 h-4" />
+                      {replyMut.isPending ? 'Sending…' : internal ? 'Save Note' : 'Send Reply'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50/50 p-5 rounded-xl border border-gray-200">
+              {/* Status Section */}
+              <div className="space-y-4">
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Ticket Status
+                  </label>
+                  {adminClosed ? (
+                    <div className="space-y-1">
+                      <StatusBadge status="closed" variant={STATUS_VARIANT.closed} />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Closed by support — this is permanent and cannot be reopened.
+                      </p>
+                    </div>
+                  ) : (
+                    <select
+                      value={ticket.status}
+                      onChange={(e) => updateMut.mutate({ status: e.target.value })}
+                      className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {statusLabels[s] || s}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                {/* Priority Section */}
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Priority Level
+                  </label>
+                  <select
+                    value={ticket.priority}
+                    disabled={adminClosed}
+                    onChange={(e) => updateMut.mutate({ priority: e.target.value })}
+                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium capitalize focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    {PRIORITIES.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Assignee Section */}
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Assignee
+                  </label>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-gray-800">
+                      {ticket.assignedTo ? userName(ticket.assignedTo) : 'Unassigned'}
+                    </span>
+                    {me && !adminClosed && (ticket.assignedTo as any)?._id !== (me as any)?._id && (
+                      <button
+                        type="button"
+                        onClick={() => claim.mutate()}
+                        className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition-colors"
+                      >
+                        Claim Ticket
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right column: Document Update / Resolution Notes / Metadata */}
+              <div className="space-y-4">
+                {ticket.metadata?.docType && (
+                  <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200 space-y-2">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-blue-700">
+                      Document Update Request
+                    </div>
+                    <div className="text-sm text-blue-900">
+                      <span className="font-medium">Type:</span>{' '}
+                      <span className="capitalize">
+                        {(ticket.metadata.docType as string).replace(/-/g, ' ')}
+                      </span>
+                    </div>
+                    {ticket.metadata.newFileUrl ? (
+                      <a
+                        href={ticket.metadata.newFileUrl as string}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-700 hover:underline pt-1"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        View Proposed New File ↗
+                      </a>
+                    ) : (
+                      <div className="text-xs text-gray-500">No file attached</div>
+                    )}
+                  </div>
+                )}
+
+                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-3">
+                  <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    Resolution Notes
+                  </label>
+                  <textarea
+                    defaultValue={ticket.resolution ?? ''}
+                    disabled={adminClosed}
+                    onBlur={(e) => {
+                      if (e.target.value !== (ticket.resolution ?? '')) {
+                        updateMut.mutate({ resolution: e.target.value });
+                      }
+                    }}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:text-gray-400"
+                    placeholder="Document how this ticket was resolved..."
+                  />
+                </div>
+
+                {(ticket.relatedRide || ticket.relatedPayment) && (
+                  <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-2 text-xs text-gray-600">
+                    <div className="font-semibold uppercase tracking-wider text-gray-500">
+                      Linked Entities
+                    </div>
+                    {ticket.relatedRide && (
+                      <div>
+                        Related Ride ID: <span className="font-mono font-medium">{ticket.relatedRide._id}</span>
+                      </div>
+                    )}
+                    {ticket.relatedPayment && (
+                      <div>
+                        Related Payment ID: <span className="font-mono font-medium">{ticket.relatedPayment._id}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </Modal>
-  );
-}
-
-function Sidebar({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-gray-500 uppercase mb-1">{label}</div>
-      <div>{children}</div>
-    </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus, Pencil, Trash2, Car, Fuel } from 'lucide-react';
+import { Plus, Pencil, Car, Fuel, ToggleLeft, ToggleRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   vehicleTypesAPI,
@@ -105,14 +105,15 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
       (await api.list()).data?.data?.types as CatalogueType[] | undefined,
   });
 
-  const remove = useMutation({
-    mutationFn: (id: string) => api.remove(id),
+  const toggleStatus = useMutation({
+    mutationFn: async (row: CatalogueType) => {
+      return api.update(row._id, { isActive: !row.isActive });
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [queryKey] });
-      toast.success(`${singularLabel} deleted`);
-      setDeleting(null);
+      toast.success('Status updated');
     },
-    onError: () => toast.error(`Failed to delete ${singularLabel}`),
+    onError: () => toast.error('Failed to update status'),
   });
 
   return (
@@ -216,11 +217,15 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                       <Pencil className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => setDeleting(row)}
-                      className="text-gray-400 hover:text-red-600 p-1"
-                      title="Delete"
+                      onClick={() => toggleStatus.mutate(row)}
+                      className="p-1 ml-2"
+                      title={row.isActive ? 'Deactivate' : 'Activate'}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      {row.isActive ? (
+                        <ToggleRight className="w-5 h-5 text-green-600 inline" />
+                      ) : (
+                        <ToggleLeft className="w-5 h-5 text-gray-400 inline" />
+                      )}
                     </button>
                   </td>
                 </tr>
@@ -259,17 +264,6 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
         />
       )}
 
-      {deleting && (
-        <ConfirmModal
-          isOpen
-          title={`Delete ${singularLabel}?`}
-          message={`"${deleting.name}" will no longer appear in driver registration. Existing drivers who selected it keep their record.`}
-          confirmText="Delete"
-          variant="danger"
-          onConfirm={() => remove.mutate(deleting._id)}
-          onClose={() => setDeleting(null)}
-        />
-      )}
     </>
   );
 }

@@ -13,6 +13,7 @@ import {
   CreditCard,
   ArrowUpCircle,
   ArrowDownCircle,
+  Undo2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -215,7 +216,7 @@ export default function PaymentsPage() {
               className="p-2 hover:bg-red-50 rounded-lg"
               title="Refund"
             >
-              <RefreshCw className="w-4 h-4 text-red-500" />
+              <Undo2 className="w-4 h-4 text-red-500" />
             </button>
           )}
         </div>

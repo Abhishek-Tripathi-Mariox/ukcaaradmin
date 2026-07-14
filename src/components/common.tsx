@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import clsx from 'clsx';
 import { RefreshCw } from 'lucide-react';
 
@@ -148,14 +149,31 @@ interface RefreshButtonProps {
 }
 
 export function RefreshButton({ onRefresh, isFetching = false }: RefreshButtonProps) {
+  const [spinning, setSpinning] = useState(false);
+  const [lastRefreshed, setLastRefreshed] = useState<Date>(new Date());
+
+  const handleClick = () => {
+    setSpinning(true);
+    onRefresh();
+    setLastRefreshed(new Date());
+    setTimeout(() => setSpinning(false), 750);
+  };
+
   return (
     <button
-      onClick={onRefresh}
-      disabled={isFetching}
-      className="flex items-center gap-2 px-3 py-2 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-60"
+      type="button"
+      onClick={handleClick}
+      disabled={isFetching || spinning}
+      className="flex items-center gap-2 px-3.5 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-xl shadow-sm hover:bg-gray-50 hover:border-gray-300 active:scale-95 transition-all disabled:opacity-70"
+      title={`Last updated: ${lastRefreshed.toLocaleTimeString()}`}
     >
-      <RefreshCw className={`w-4 h-4 ${isFetching ? 'animate-spin' : ''}`} />
-      Refresh
+      <RefreshCw
+        className={clsx(
+          'w-4 h-4 text-brand-teal transition-transform',
+          (isFetching || spinning) && 'animate-spin'
+        )}
+      />
+      <span>Refresh</span>
     </button>
   );
 }
