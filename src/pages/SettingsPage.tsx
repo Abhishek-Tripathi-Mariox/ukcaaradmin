@@ -379,6 +379,40 @@ export default function SettingsPage() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Safety Helpline (24/7)
+                </label>
+                <input
+                  type="text"
+                  placeholder="+91…"
+                  value={generalForm.safetyHelpline || ''}
+                  onChange={(e) => setGeneralForm({ ...generalForm, safetyHelpline: e.target.value })}
+                  className="input"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Dialled by the rider app's Safety screen.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Safety Guidelines URL
+                </label>
+                <input
+                  type="text"
+                  placeholder="https://…"
+                  value={generalForm.safetyGuidelinesUrl || ''}
+                  onChange={(e) =>
+                    setGeneralForm({ ...generalForm, safetyGuidelinesUrl: e.target.value })
+                  }
+                  className="input"
+                />
+                <p className="text-xs text-gray-400 mt-1">
+                  Opened by "Safety guidelines" in the rider app.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Max Search Radius (km)
                 </label>
                 <input

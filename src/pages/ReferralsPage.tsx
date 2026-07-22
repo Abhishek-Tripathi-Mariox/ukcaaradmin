@@ -56,8 +56,15 @@ export default function ReferralsPage() {
   const summary = data?.summary ?? { totalReferrers: 0, totalReferred: 0, totalEarnings: 0 };
   const referrers = data?.referrers ?? [];
 
-  // ── Referral program settings (admin-configurable joiner bonus) ──
+  // ── Referral program settings ──
+  // Three knobs: the JOINER bonus (credited when a code is applied) and the
+  // two REFERRER rewards (paid when the referred person completes their first
+  // ride — split by the referrer's role). The referrer rewards existed only
+  // as backend fields with no UI, so the app's Refer & Earn page had nothing
+  // admin-controlled to show.
   const [bonus, setBonus] = useState('');
+  const [rewardCustomer, setRewardCustomer] = useState('');
+  const [rewardDriver, setRewardDriver] = useState('');
   const settingsQ = useQuery({
     queryKey: ['referral-settings'],
     queryFn: async () => (await settingsAPI.getGeneral()).data?.data ?? {},
@@ -66,12 +73,23 @@ export default function ReferralsPage() {
     if (settingsQ.data?.referralBonus !== undefined) {
       setBonus(String(settingsQ.data.referralBonus ?? 0));
     }
+    if (settingsQ.data?.referrerRewardCustomer !== undefined) {
+      setRewardCustomer(String(settingsQ.data.referrerRewardCustomer ?? 0));
+    }
+    if (settingsQ.data?.referrerRewardDriver !== undefined) {
+      setRewardDriver(String(settingsQ.data.referrerRewardDriver ?? 0));
+    }
   }, [settingsQ.data]);
 
   const saveBonusMut = useMutation({
-    mutationFn: () => settingsAPI.updateGeneral({ referralBonus: Number(bonus) || 0 }),
-    onSuccess: () => toast.success('Referral bonus updated'),
-    onError: () => toast.error('Failed to update referral bonus'),
+    mutationFn: () =>
+      settingsAPI.updateGeneral({
+        referralBonus: Number(bonus) || 0,
+        referrerRewardCustomer: Number(rewardCustomer) || 0,
+        referrerRewardDriver: Number(rewardDriver) || 0,
+      }),
+    onSuccess: () => toast.success('Referral program settings updated'),
+    onError: () => toast.error('Failed to update referral settings'),
   });
 
   const copyCode = (code?: string) => {
@@ -202,11 +220,12 @@ export default function ReferralsPage() {
       <div className="bg-white rounded-xl shadow-sm p-5 mb-6">
         <h3 className="text-lg font-semibold mb-1">Referral Program</h3>
         <p className="text-sm text-gray-500 mb-4">
-          Wallet bonus (₹) credited to a customer when they apply someone's referral code.
-          Set to 0 to disable the bonus (codes still link referrals).
+          Joiner bonus is credited when someone applies a referral code. Referrer rewards are
+          paid to the code's owner once the person they referred completes their first ride —
+          this is the amount the app advertises on Refer &amp; Earn. Set 0 to disable.
         </p>
-        <div className="flex items-end gap-3 max-w-md">
-          <div className="flex-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-3xl">
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Joiner bonus (₹)</label>
             <input
               type="number"
@@ -217,14 +236,40 @@ export default function ReferralsPage() {
               placeholder="0"
             />
           </div>
-          <button
-            onClick={() => saveBonusMut.mutate()}
-            disabled={saveBonusMut.isPending || settingsQ.isLoading}
-            className="btn btn-primary"
-          >
-            {saveBonusMut.isPending ? 'Saving…' : 'Save'}
-          </button>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Referrer reward — customer (₹)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={rewardCustomer}
+              onChange={(e) => setRewardCustomer(e.target.value)}
+              className="input"
+              placeholder="0"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Referrer reward — driver (₹)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={rewardDriver}
+              onChange={(e) => setRewardDriver(e.target.value)}
+              className="input"
+              placeholder="0"
+            />
+          </div>
         </div>
+        <button
+          onClick={() => saveBonusMut.mutate()}
+          disabled={saveBonusMut.isPending || settingsQ.isLoading}
+          className="btn btn-primary mt-4"
+        >
+          {saveBonusMut.isPending ? 'Saving…' : 'Save'}
+        </button>
       </div>
 
       {/* Search */}
