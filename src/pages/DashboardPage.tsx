@@ -43,7 +43,13 @@ export default function DashboardPage() {
     queryKey: ['analytics', 'rides'],
     queryFn: async () => {
       const res = await dashboardAPI.getRideAnalytics('7d');
-      return res.data.data;
+      // The backend returns `analytics: [{_id: date, total, revenue}]` — the
+      // charts bind to `chartData` with {date, rides, revenue} keys, so reshape
+      // here (the charts were empty because chartData didn't exist).
+      const analytics = (res.data.data?.analytics ?? []) as Array<{ _id: string; total: number; revenue: number }>;
+      return {
+        chartData: analytics.map((d) => ({ date: d._id, rides: d.total, revenue: d.revenue })),
+      };
     },
   });
 
@@ -51,7 +57,12 @@ export default function DashboardPage() {
     queryKey: ['analytics', 'revenue'],
     queryFn: async () => {
       const res = await dashboardAPI.getRevenueAnalytics('7d');
-      return res.data.data;
+      // Backend returns `revenueByDay: [{_id: date, revenue}]`; the BarChart
+      // wants {date, revenue}.
+      const revenueByDay = (res.data.data?.revenueByDay ?? []) as Array<{ _id: string; revenue: number }>;
+      return {
+        chartData: revenueByDay.map((d) => ({ date: d._id, revenue: d.revenue })),
+      };
     },
   });
 

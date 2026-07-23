@@ -68,11 +68,30 @@ export const authAPI = {
 export const dashboardAPI = {
   getMetrics: () => api.get('/admin/dashboard'),
   
-  getRideAnalytics: (period: string = '7d') =>
-    api.get(`/admin/analytics/rides?period=${period}`),
-  
-  getRevenueAnalytics: (period: string = '7d') =>
-    api.get(`/admin/analytics/revenue?period=${period}`),
+  // Backend groups by day over [startDate, endDate] and ignores `period`
+  // (it defaulted to 30 days), so the "7 Days" charts showed ~30 points. Send
+  // an explicit window matching the requested period.
+  getRideAnalytics: (period: string = '7d') => {
+    const days = period === '30d' ? 30 : 7;
+    return api.get('/admin/analytics/rides', {
+      params: {
+        period,
+        startDate: new Date(Date.now() - days * 86400000).toISOString(),
+        endDate: new Date().toISOString(),
+      },
+    });
+  },
+
+  getRevenueAnalytics: (period: string = '7d') => {
+    const days = period === '30d' ? 30 : 7;
+    return api.get('/admin/analytics/revenue', {
+      params: {
+        period,
+        startDate: new Date(Date.now() - days * 86400000).toISOString(),
+        endDate: new Date().toISOString(),
+      },
+    });
+  },
   
   exportReport: (type: string, startDate: string, endDate: string) =>
     api.get(`/admin/exports/${type}`, { params: { startDate, endDate } }),
@@ -158,14 +177,17 @@ export const onePassAPI = {
   updatePlans: (plans: { key: string; label: string; price: number; days: number; active: boolean }[]) =>
     api.patch('/admin/onepass/plans', { plans }),
   
+  // Backend defines these as PUT (admin.ts) — POST 404s and the button no-ops.
   extendSubscription: (driverId: string, days: number) =>
-    api.post(`/admin/onepass/${driverId}/extend`, { days }),
-  
+    api.put(`/admin/onepass/${driverId}/extend`, { days }),
+
   cancelSubscription: (driverId: string, reason: string) =>
-    api.post(`/admin/onepass/${driverId}/cancel`, { reason }),
-  
+    api.put(`/admin/onepass/${driverId}/cancel`, { reason }),
+
+  // Backend grant reads `days`, not `duration` — sending `duration` made every
+  // grant silently default to 30 days.
   grantSubscription: (driverId: string, plan: string, duration: number, reason: string) =>
-    api.post(`/admin/onepass/${driverId}/grant`, { plan, duration, reason }),
+    api.post(`/admin/onepass/${driverId}/grant`, { plan, days: duration, reason }),
 };
 
 // ════════════════════════════════════════════════════════════════════

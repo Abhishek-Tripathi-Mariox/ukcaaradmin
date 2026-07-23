@@ -4,6 +4,7 @@ import { onePassAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, StatCard, RefreshButton } from '@/components/common';
+import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
 import {
   Search,
   Crown,
@@ -34,6 +35,7 @@ export default function OnePassPage() {
     duration: 30,
     reason: '',
   });
+  const [grantUser, setGrantUser] = useState<AdminUserLite | null>(null);
   const queryClient = useQueryClient();
 
   // ── Plan configuration (price/duration the driver app offers) ──
@@ -111,6 +113,7 @@ export default function OnePassPage() {
       toast.success('Subscription granted');
       setShowGrantModal(false);
       setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+      setGrantUser(null);
     },
     onError: () => toast.error('Failed to grant subscription'),
   });
@@ -504,22 +507,22 @@ export default function OnePassPage() {
         onClose={() => {
           setShowGrantModal(false);
           setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+          setGrantUser(null);
         }}
         title="Grant OnePass Subscription"
       >
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Driver ID *
-            </label>
-            <input
-              type="text"
-              value={grantData.driverId}
-              onChange={(e) => setGrantData({ ...grantData, driverId: e.target.value })}
-              className="input"
-              placeholder="Enter driver ID..."
-            />
-          </div>
+          <UserSearchSelect
+            label="Driver"
+            required
+            roles={['driver']}
+            defaultRole="driver"
+            value={grantUser}
+            onChange={(u) => {
+              setGrantUser(u);
+              setGrantData({ ...grantData, driverId: u?._id ?? '' });
+            }}
+          />
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Plan
@@ -560,7 +563,14 @@ export default function OnePassPage() {
             />
           </div>
           <div className="flex justify-end gap-3">
-            <button onClick={() => setShowGrantModal(false)} className="btn btn-secondary">
+            <button
+              onClick={() => {
+                setShowGrantModal(false);
+                setGrantUser(null);
+                setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+              }}
+              className="btn btn-secondary"
+            >
               Cancel
             </button>
             <button
