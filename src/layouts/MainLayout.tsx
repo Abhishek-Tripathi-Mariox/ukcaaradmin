@@ -27,7 +27,6 @@ import {
   Route as RouteIcon,
   Truck,
   Calculator,
-  Repeat,
   Share2,
   HelpCircle,
   Wallet,
@@ -89,7 +88,10 @@ const navGroups: NavGroup[] = [
       { name: 'Payments', href: '/payments', icon: CreditCard, perm: PERMISSIONS.VIEW_PAYMENTS },
       { name: 'Settlements', href: '/settlements', icon: Receipt, perm: PERMISSIONS.VIEW_SETTLEMENTS },
       { name: 'Invoices', href: '/invoices', icon: FileText, perm: PERMISSIONS.MANAGE_INVOICES },
-      { name: 'Subscriptions', href: '/subscriptions', icon: Repeat, perm: PERMISSIONS.VIEW_PAYMENTS },
+      // 'Subscriptions' nav intentionally hidden — the SubscriptionPlan/UserSubscription
+      // system is admin-only and inert (no app-side purchase, nothing enforced in pricing).
+      // OnePass is the live membership. Re-add this entry + the /subscriptions route in
+      // App.tsx to restore. See SubscriptionsPage.tsx (kept on disk).
       { name: 'Fare Calculation', href: '/fare-calculation', icon: Calculator, perm: PERMISSIONS.VIEW_SETTINGS },
       { name: 'Exports', href: '/exports', icon: FileDown, perm: PERMISSIONS.EXPORT_REPORTS },
     ],

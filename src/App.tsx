@@ -38,7 +38,8 @@ const NotificationTemplatesPage = lazy(() => import('@/pages/NotificationTemplat
 const VehicleTypesPage = lazy(() => import('@/pages/VehicleTypesPage'));
 const FaqsPage = lazy(() => import('@/pages/FaqsPage'));
 const FareCalculationPage = lazy(() => import('@/pages/FareCalculationPage'));
-const SubscriptionsPage = lazy(() => import('@/pages/SubscriptionsPage'));
+// SubscriptionsPage route intentionally removed — feature hidden (admin-only, inert).
+// Re-add this lazy import + the /subscriptions <Route> below to restore it.
 const ReferralsPage = lazy(() => import('@/pages/ReferralsPage'));
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -280,14 +281,6 @@ function AppRoutes() {
             element={
               <PermissionGuard permission="view_settings">
                 <FareCalculationPage />
-              </PermissionGuard>
-            }
-          />
-          <Route
-            path="subscriptions"
-            element={
-              <PermissionGuard permission="view_payments">
-                <SubscriptionsPage />
               </PermissionGuard>
             }
           />

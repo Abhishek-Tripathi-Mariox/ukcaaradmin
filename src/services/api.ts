@@ -153,6 +153,10 @@ export const onePassAPI = {
     api.get('/admin/onepass/subscribers', { params }),
   
   getStats: () => api.get('/admin/onepass/stats'),
+
+  getPlans: () => api.get('/admin/onepass/plans'),
+  updatePlans: (plans: { key: string; label: string; price: number; days: number; active: boolean }[]) =>
+    api.patch('/admin/onepass/plans', { plans }),
   
   extendSubscription: (driverId: string, days: number) =>
     api.post(`/admin/onepass/${driverId}/extend`, { days }),

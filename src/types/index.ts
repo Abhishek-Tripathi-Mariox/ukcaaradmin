@@ -60,6 +60,9 @@ export interface DriverDocument {
   verifiedAt?: string;
   verifiedBy?: string;
   note?: string;
+  rejectionReason?: string;
+  reviewedAt?: string;
+  resubmittedAt?: string;
   expiry?: string;
 }
 

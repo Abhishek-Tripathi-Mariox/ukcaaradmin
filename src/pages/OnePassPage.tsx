@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { onePassAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
@@ -35,6 +35,27 @@ export default function OnePassPage() {
     reason: '',
   });
   const queryClient = useQueryClient();
+
+  // ── Plan configuration (price/duration the driver app offers) ──
+  type PlanRow = { key: string; label: string; price: number; days: number; active: boolean };
+  const plansQ = useQuery({
+    queryKey: ['onepass', 'plans'],
+    queryFn: async () => (await onePassAPI.getPlans()).data?.data?.plans as PlanRow[],
+  });
+  const [planRows, setPlanRows] = useState<PlanRow[] | null>(null);
+  useEffect(() => {
+    if (plansQ.data) setPlanRows(plansQ.data.map((p) => ({ ...p })));
+  }, [plansQ.data]);
+  const savePlansMut = useMutation({
+    mutationFn: (rows: PlanRow[]) => onePassAPI.updatePlans(rows),
+    onSuccess: () => {
+      toast.success('OnePass plans saved');
+      queryClient.invalidateQueries({ queryKey: ['onepass', 'plans'] });
+    },
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to save plans'),
+  });
+  const setPlanField = (i: number, field: keyof PlanRow, value: any) =>
+    setPlanRows((rows) => rows?.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) ?? rows);
 
   const { data: stats } = useQuery({
     queryKey: ['onepass', 'stats'],
@@ -222,6 +243,67 @@ export default function OnePassPage() {
           </div>
         }
       />
+
+      {/* Plan configuration — price + duration the driver app shows. */}
+      <div className="bg-white rounded-xl shadow-sm p-5 mb-8">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-lg font-semibold">Subscription Plans</h3>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={!planRows || savePlansMut.isPending}
+            onClick={() => planRows && savePlansMut.mutate(planRows)}
+          >
+            {savePlansMut.isPending ? 'Saving…' : 'Save Plans'}
+          </button>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          These are the exact plans and prices the driver app offers. The price is charged
+          server-side, so the app can never bill a value you didn't set here.
+        </p>
+        {!planRows ? (
+          <p className="text-sm text-gray-400 py-4">Loading plans…</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-gray-500 border-b">
+                  <th className="py-2 pr-3">Key</th>
+                  <th className="py-2 pr-3">Label</th>
+                  <th className="py-2 pr-3">Price (₹)</th>
+                  <th className="py-2 pr-3">Duration (days)</th>
+                  <th className="py-2 pr-3">Active</th>
+                </tr>
+              </thead>
+              <tbody>
+                {planRows.map((row, i) => (
+                  <tr key={i} className="border-b last:border-0">
+                    <td className="py-2 pr-3">
+                      <input className="input input-sm w-28" value={row.key}
+                        onChange={(e) => setPlanField(i, 'key', e.target.value)} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input className="input input-sm w-36" value={row.label}
+                        onChange={(e) => setPlanField(i, 'label', e.target.value)} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input type="number" min={0} className="input input-sm w-28" value={row.price}
+                        onChange={(e) => setPlanField(i, 'price', Number(e.target.value))} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input type="number" min={1} className="input input-sm w-28" value={row.days}
+                        onChange={(e) => setPlanField(i, 'days', Number(e.target.value))} />
+                    </td>
+                    <td className="py-2 pr-3">
+                      <input type="checkbox" checked={row.active}
+                        onChange={(e) => setPlanField(i, 'active', e.target.checked)} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">

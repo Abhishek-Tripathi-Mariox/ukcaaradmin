@@ -1156,6 +1156,16 @@ function DriverDetailModal({
                             ? `Expires: ${format(new Date(doc.expiry), 'PP')}`
                             : 'No expiry'}
                         </div>
+                        {doc.status === 'rejected' && doc.rejectionReason && (
+                          <div className="text-xs text-red-600 mt-0.5">
+                            Reason: {doc.rejectionReason}
+                          </div>
+                        )}
+                        {doc.status === 'pending' && doc.resubmittedAt && (
+                          <div className="text-xs text-amber-600 mt-0.5 font-medium">
+                            Re-submitted {format(new Date(doc.resubmittedAt), 'PP p')} — needs review
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -1323,7 +1333,7 @@ function DriverDetailModal({
             Rejecting <span className="font-medium capitalize">{docRejectTarget.type.replace(/_/g, ' ')}</span>.
           </p>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Rejection note (optional)</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Rejection reason <span className="text-red-500">*</span></label>
             <input
               autoFocus
               className="input w-full"
@@ -1338,11 +1348,13 @@ function DriverDetailModal({
             </button>
             <button
               className="btn btn-danger"
+              disabled={!docRejectNote.trim()}
               onClick={() => {
+                if (!docRejectNote.trim()) return;
                 onAction.verifyDocument({
                   documentType: docRejectTarget.type,
                   status: 'rejected',
-                  note: docRejectNote.trim() || undefined,
+                  note: docRejectNote.trim(),
                 });
                 setDocRejectTarget(null);
               }}
