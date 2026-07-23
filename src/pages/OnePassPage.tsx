@@ -115,9 +115,13 @@ export default function OnePassPage() {
     onError: () => toast.error('Failed to grant subscription'),
   });
 
-  const getDaysRemaining = (expiresAt: string) => {
-    const days = differenceInDays(new Date(expiresAt), new Date());
-    return days;
+  // Returns null when there is no valid expiry date, so callers can render a
+  // placeholder instead of feeding an Invalid Date to date-fns (which throws).
+  const getDaysRemaining = (expiresAt?: string | null): number | null => {
+    if (!expiresAt) return null;
+    const d = new Date(expiresAt);
+    if (isNaN(d.getTime())) return null;
+    return differenceInDays(d, new Date());
   };
 
   const columns = [
@@ -143,12 +147,16 @@ export default function OnePassPage() {
     {
       key: 'vehicle',
       header: 'Vehicle',
-      render: (driver: any) => (
-        <div className="flex items-center gap-2">
-          <Car className="w-4 h-4 text-gray-400" />
-          <span className="capitalize">{driver.driverProfile?.vehicleType}</span>
-        </div>
-      ),
+      render: (driver: any) => {
+        const dp = driver.driverProfile;
+        const vehicle = [dp?.vehicleMake, dp?.vehicleModel].filter(Boolean).join(' ') || '—';
+        return (
+          <div className="flex items-center gap-2">
+            <Car className="w-4 h-4 text-gray-400" />
+            <span className="capitalize">{vehicle}</span>
+          </div>
+        );
+      },
     },
     {
       key: 'rating',
@@ -164,7 +172,11 @@ export default function OnePassPage() {
       key: 'expires',
       header: 'Expires',
       render: (driver: any) => {
-        const daysRemaining = getDaysRemaining(driver.driverProfile?.onePassExpiresAt);
+        const expiry = driver.driverProfile?.onePassExpiry;
+        const daysRemaining = getDaysRemaining(expiry);
+        if (daysRemaining === null) {
+          return <span className="text-sm text-gray-400">—</span>;
+        }
         return (
           <div>
             <div className={clsx(
@@ -174,7 +186,7 @@ export default function OnePassPage() {
               {daysRemaining} days left
             </div>
             <div className="text-sm text-gray-500">
-              {format(new Date(driver.driverProfile?.onePassExpiresAt), 'MMM d, yyyy')}
+              {format(new Date(expiry), 'MMM d, yyyy')}
             </div>
           </div>
         );
@@ -184,11 +196,12 @@ export default function OnePassPage() {
       key: 'status',
       header: 'Status',
       render: (driver: any) => {
-        const daysRemaining = getDaysRemaining(driver.driverProfile?.onePassExpiresAt);
+        const daysRemaining = getDaysRemaining(driver.driverProfile?.onePassExpiry);
+        const active = daysRemaining !== null && daysRemaining > 0;
         return (
           <StatusBadge
-            status={daysRemaining > 0 ? 'active' : 'expired'}
-            variant={daysRemaining > 0 ? 'success' : 'danger'}
+            status={active ? 'active' : 'expired'}
+            variant={active ? 'success' : 'danger'}
           />
         );
       },
@@ -403,8 +416,9 @@ export default function OnePassPage() {
                 {selectedDriver?.firstName} {selectedDriver?.lastName}
               </div>
               <div className="text-sm text-gray-500">
-                Current expiry: {selectedDriver?.driverProfile?.onePassExpiresAt && 
-                  format(new Date(selectedDriver.driverProfile.onePassExpiresAt), 'PPP')}
+                Current expiry: {selectedDriver?.driverProfile?.onePassExpiry
+                  ? format(new Date(selectedDriver.driverProfile.onePassExpiry), 'PPP')
+                  : '—'}
               </div>
             </div>
           </div>
