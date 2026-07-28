@@ -4,7 +4,7 @@ import { notificationTemplatesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
-import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -36,6 +36,23 @@ export default function NotificationTemplatesPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<Template | null>(null);
   const [testing, setTesting] = useState<Template | null>(null);
+  const [prefillKey, setPrefillKey] = useState<string | null>(null);
+
+  interface RegistryEntry {
+    key: string;
+    audience: string;
+    description: string;
+    variables: string[];
+    hasTemplate: boolean;
+    hasActiveTemplate: boolean;
+  }
+  const { data: registry } = useQuery({
+    queryKey: ['notification-template-registry'],
+    queryFn: async () => {
+      const res = await notificationTemplatesAPI.getRegistry();
+      return (res.data?.data?.registry ?? []) as RegistryEntry[];
+    },
+  });
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ['notification-templates', search, typeFilter],
@@ -66,13 +83,57 @@ export default function NotificationTemplatesPage() {
         actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
 
-      <div className="flex items-start gap-3 mb-4 p-4 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-800">
-        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-        <p>
-          Heads up: templates are not yet wired into app notification flows. Editing them
-          changes nothing riders or drivers receive yet — production notifications still use
-          built-in copy.
+      {/* Live registry: the keys the backend consults on real notifications.
+          A key without an active template falls back to built-in copy. */}
+      <div className="mb-4 p-4 rounded-lg border border-blue-200 bg-blue-50">
+        <p className="text-sm font-medium text-blue-900 mb-2">
+          Live template keys — these are consulted by real ride, application and
+          shuttle notifications. Create a template for a key to override its
+          built-in copy (missing keys safely fall back).
         </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+          {(registry ?? []).map((r) => (
+            <div
+              key={r.key}
+              className="flex items-start justify-between gap-2 bg-white rounded-md border border-blue-100 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <code className="text-xs font-mono text-gray-800">{r.key}</code>
+                  <span className="text-[10px] uppercase px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">
+                    {r.audience}
+                  </span>
+                  {r.hasActiveTemplate ? (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">
+                      Live template
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">
+                      Built-in copy
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-0.5">{r.description}</p>
+                {r.variables.length > 0 && (
+                  <p className="text-[11px] font-mono text-gray-400 mt-0.5 truncate">
+                    {r.variables.map((v) => `{{${v}}}`).join(' ')}
+                  </p>
+                )}
+              </div>
+              {!r.hasTemplate && (
+                <button
+                  onClick={() => {
+                    setPrefillKey(r.key);
+                    setCreating(true);
+                  }}
+                  className="shrink-0 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                >
+                  Create
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
@@ -185,11 +246,16 @@ export default function NotificationTemplatesPage() {
       {(creating || editing) && (
         <TemplateFormModal
           template={editing}
+          initialKey={prefillKey}
           onClose={() => {
             setCreating(false);
             setEditing(null);
+            setPrefillKey(null);
           }}
-          onSaved={() => qc.invalidateQueries({ queryKey: ['notification-templates'] })}
+          onSaved={() => {
+            qc.invalidateQueries({ queryKey: ['notification-templates'] });
+            qc.invalidateQueries({ queryKey: ['notification-template-registry'] });
+          }}
         />
       )}
 
@@ -217,15 +283,17 @@ export default function NotificationTemplatesPage() {
 
 function TemplateFormModal({
   template,
+  initialKey,
   onClose,
   onSaved,
 }: {
   template: Template | null;
+  initialKey?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   const isEdit = !!template;
-  const [key, setKey] = useState(template?.key ?? '');
+  const [key, setKey] = useState(template?.key ?? initialKey ?? '');
   const [name, setName] = useState(template?.name ?? '');
   const [description, setDescription] = useState(template?.description ?? '');
   const [type, setType] = useState(template?.type ?? 'system');

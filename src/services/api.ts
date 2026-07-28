@@ -793,6 +793,8 @@ export const geoAPI = {
 export const notificationTemplatesAPI = {
   list: (params?: { search?: string; type?: string; locale?: string; isActive?: boolean }) =>
     api.get('/admin/notification-templates', { params }),
+  // Keys the backend actually consults (with variables + live status).
+  getRegistry: () => api.get('/admin/notification-templates/registry'),
   get: (id: string) => api.get(`/admin/notification-templates/${id}`),
   create: (data: any) => api.post('/admin/notification-templates', data),
   update: (id: string, data: any) => api.patch(`/admin/notification-templates/${id}`, data),
