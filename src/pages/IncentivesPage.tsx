@@ -88,7 +88,14 @@ export default function IncentivesPage() {
         subtitle="Performance-based bonuses and payouts"
         actions={
           <div className="flex gap-2">
-            <RefreshButton onRefresh={() => rulesQ.refetch()} isFetching={rulesQ.isFetching} />
+            <RefreshButton
+              onRefresh={() => {
+                rulesQ.refetch();
+                // Covers both progress and payout variants of the query key
+                qc.invalidateQueries({ queryKey: ['incentive-progress'] });
+              }}
+              isFetching={rulesQ.isFetching}
+            />
             <button
               onClick={() => {
                 setEditing(null);
@@ -499,12 +506,14 @@ function IncentiveFormModal({
         threshold: Number(form.threshold),
         rewardType: form.rewardType,
         rewardAmount: Number(form.rewardAmount),
-        minRating: form.minRating ? Number(form.minRating) : undefined,
+        // Blank optional fields send null (undefined is JSON-dropped and
+        // would silently never clear a previously set value)
+        minRating: form.minRating ? Number(form.minRating) : null,
         rideTypes: form.rideTypes
           ? form.rideTypes.split(',').map((s) => s.trim()).filter(Boolean)
-          : undefined,
-        startDate: form.startDate || undefined,
-        endDate: form.endDate || undefined,
+          : null,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
       };
       if (incentive) {
         await incentivesAPI.update(incentive._id, payload);

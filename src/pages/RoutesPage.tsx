@@ -71,7 +71,7 @@ const blankForm = (): RouteForm => ({
     returnDepartures: [],
     seatPrice: 0,
     vehicleType: '',
-    totalSeats: 0,
+    totalSeats: 1,
   },
 });
 
@@ -405,6 +405,9 @@ function RouteFormModal({
     }
 
     if (isScheduled) {
+      if ((Number(form.schedule?.totalSeats) || 0) < 1) {
+        next.schedule = 'Total seats must be at least 1';
+      }
       const deps = form.schedule?.departures ?? [];
       if (deps.length === 0) {
         next.departures = 'Add at least one departure for a scheduled route';
@@ -797,7 +800,7 @@ function RouteFormModal({
                 <label className="text-xs text-gray-600">Total seats</label>
                 <input
                   type="number"
-                  min={0}
+                  min={1}
                   className="input"
                   value={form.schedule?.totalSeats ?? 0}
                   onChange={(e) =>
@@ -810,6 +813,9 @@ function RouteFormModal({
                     }))
                   }
                 />
+                {errors.schedule && (
+                  <p className="text-[11px] text-red-600 mt-1">{errors.schedule}</p>
+                )}
               </div>
               <div>
                 <label className="text-xs text-gray-600">Vehicle type</label>

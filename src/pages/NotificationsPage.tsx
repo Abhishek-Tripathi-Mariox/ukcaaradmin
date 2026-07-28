@@ -322,6 +322,10 @@ export default function NotificationsPage() {
                     <div className="p-6 flex justify-center">
                       <LoadingSpinner />
                     </div>
+                  ) : userSearch.isError ? (
+                    <div className="p-6 text-center text-sm text-red-600">
+                      Search failed — try again
+                    </div>
                   ) : (userSearch.data?.length ?? 0) === 0 ? (
                     <div className="p-6 text-center text-sm text-gray-500">
                       No {individualData.role} found with that mobile number.

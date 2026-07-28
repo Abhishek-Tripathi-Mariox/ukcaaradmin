@@ -4,7 +4,7 @@ import { notificationTemplatesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
 import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
-import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
 
@@ -65,6 +65,15 @@ export default function NotificationTemplatesPage() {
         subtitle="Authorable push + in-app messages with variables and locale variants"
         actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
       />
+
+      <div className="flex items-start gap-3 mb-4 p-4 rounded-lg border border-amber-300 bg-amber-50 text-sm text-amber-800">
+        <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+        <p>
+          Heads up: templates are not yet wired into app notification flows. Editing them
+          changes nothing riders or drivers receive yet — production notifications still use
+          built-in copy.
+        </p>
+      </div>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-4">
         <div className="relative flex-1">
@@ -522,6 +531,10 @@ function TestSendModal({
     },
     onSuccess: (res) => {
       const d = res.data?.data;
+      if (d?.delivered === false) {
+        toast.error('Not delivered — template inactive or no matching locale for this user.');
+        return;
+      }
       toast.success(
         d?.usedFallback ? 'Sent (used fallback copy)' : 'Sent successfully',
       );

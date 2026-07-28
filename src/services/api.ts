@@ -231,9 +231,10 @@ export const ridesAPI = {
     api.put(`/admin/rides/${id}/cancel`, {
       reason,
       refund: refundPercentage != null && refundPercentage > 0,
-      // refundAmount left undefined → backend defaults to actualFare or
-      // estimatedFare. If a future caller needs partial refunds we can add
-      // a `refundAmount` arg without touching the backend.
+      // Pass the percentage through — it used to be collapsed to a boolean,
+      // so "refund 10%" silently refunded 100% (backend defaulted to full
+      // fare when no amount was given).
+      refundPercentage,
     }),
   
   // Cancel a shuttle seat reservation (scheduled-tab rows with a `sched_`
@@ -304,13 +305,15 @@ export const promoAPI = {
     description?: string;
   }) => api.post('/admin/promos', data),
   
-  update: (id: string, data: any) => api.patch(`/admin/promos/${id}`, data),
+  // Backend registers PUT — PATCH/POST 404'd, so Edit and the status toggle
+  // were dead buttons.
+  update: (id: string, data: any) => api.put(`/admin/promos/${id}`, data),
   
   delete: (id: string) => api.delete(`/admin/promos/${id}`),
   
   getUsage: (id: string) => api.get(`/admin/promos/${id}/usage`),
   
-  toggleStatus: (id: string) => api.post(`/admin/promos/${id}/toggle`),
+  toggleStatus: (id: string) => api.put(`/admin/promos/${id}/toggle`),
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -340,7 +343,7 @@ export const walletsAPI = {
   getByUserId: (userId: string) => api.get(`/admin/wallets/${userId}`),
   
   adjustBalance: (userId: string, amount: number, type: 'credit' | 'debit', reason: string) =>
-    api.post(`/admin/wallets/${userId}/adjust`, { amount, type, reason }),
+    api.put(`/admin/wallets/${userId}/adjust`, { amount, type, reason }),
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -529,10 +532,12 @@ export const financeAPI = {
 
   getInvoice: (id: string) => api.get(`/admin/invoices/${id}`),
 
-  invoicePdfUrl: (id: string) => {
-    const token = useAuthStore.getState().token;
-    return `${API_BASE_URL}/admin/invoices/${id}/pdf${token ? `?token=${encodeURIComponent(token)}` : ''}`;
-  },
+  /**
+   * Fetch the invoice PDF via the authed client (Authorization header) so the
+   * JWT never appears in a URL / browser history. Callers build an object URL.
+   */
+  getPdfBlob: (id: string) =>
+    api.get(`/admin/invoices/${id}/pdf`, { responseType: 'blob' }),
 
   createCustomerInvoice: (data: {
     rideId: string;
@@ -615,16 +620,18 @@ export const reportsAPI = {
 
   /**
    * Download a CSV using axios (carries auth header) and trigger a browser download.
+   * Returns false (and skips the download) when the export is empty.
    */
   downloadCsv: async (
     type: string,
     params?: Record<string, string | number | undefined>
-  ) => {
+  ): Promise<boolean> => {
     const res = await api.get(`/admin/exports/${type}.csv`, {
       params,
       responseType: 'blob',
     });
     const blob = new Blob([res.data as BlobPart], { type: 'text/csv' });
+    if (blob.size === 0) return false;
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -633,6 +640,7 @@ export const reportsAPI = {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    return true;
   },
 };
 
@@ -803,7 +811,8 @@ export interface CatalogueType {
   _id: string;
   name: string;
   code: string;
-  description?: string;
+  // null in a payload asks the backend to clear/unset the field
+  description?: string | null;
   isActive: boolean;
   sortOrder: number;
   /**
@@ -815,10 +824,10 @@ export interface CatalogueType {
   // Vehicle-type-only pricing. The customer's /rides/estimate and the
   // ride-create flow look these up by code and fall back to the legacy
   // baseFares table when a field is blank.
-  baseFare?: number;
-  perKmFare?: number;
-  perMinFare?: number;
-  minFare?: number;
+  baseFare?: number | null;
+  perKmFare?: number | null;
+  perMinFare?: number | null;
+  minFare?: number | null;
   createdAt?: string;
   updatedAt?: string;
 }

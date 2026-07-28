@@ -78,7 +78,9 @@ export default function DashboardPage() {
 
   const driverStatusData = metrics ? [
     { name: 'Online', value: metrics.drivers.online, color: '#22c55e' },
-    { name: 'Offline', value: metrics.drivers.verified - metrics.drivers.online, color: '#94a3b8' },
+    // Clamp: the two counts come from separate queries, so a race can
+    // briefly report more online than verified.
+    { name: 'Offline', value: Math.max(0, metrics.drivers.verified - metrics.drivers.online), color: '#94a3b8' },
     { name: 'Pending', value: metrics.drivers.pending, color: '#f59e0b' },
   ] : [];
 

@@ -214,7 +214,7 @@ function ZoneFormModal({
   const [coordsText, setCoordsText] = useState(
     zone
       ? JSON.stringify(zone.geometry?.coordinates ?? [], null, 2)
-      : '[\n  [\n    [-0.13, 51.50],\n    [-0.10, 51.50],\n    [-0.10, 51.52],\n    [-0.13, 51.52],\n    [-0.13, 51.50]\n  ]\n]'
+      : '[\n  [\n    [78.02, 30.30],\n    [78.05, 30.30],\n    [78.05, 30.33],\n    [78.02, 30.33],\n    [78.02, 30.30]\n  ]\n]'
   );
 
   const save = useMutation({
@@ -552,15 +552,17 @@ function SurgeRuleFormModal({
       const body: any = {
         name,
         description,
-        zone: zone || undefined,
+        // null (not undefined) so the backend can $unset and revert to Global
+        zone: zone || null,
         daysOfWeek,
         startMinute: hhmmToMinutes(startMinute),
         endMinute: hhmmToMinutes(endMinute),
-        multiplier: Number(multiplier),
-        flatSurcharge: Number(flatSurcharge),
         priority: Number(priority),
         isActive,
       };
+      // Blank inputs mean "not provided"; Number('') would send 0 and trip schema mins
+      if (String(multiplier) !== '') body.multiplier = Number(multiplier);
+      if (String(flatSurcharge) !== '') body.flatSurcharge = Number(flatSurcharge);
       if (isEdit) return zonesAPI.updateSurgeRule(rule._id, body);
       return zonesAPI.createSurgeRule(body);
     },
@@ -710,12 +712,15 @@ function SurgeRuleFormModal({
 // ════════════════════════════════════════════════════════════════════
 
 function ProbeTab() {
-  const [lat, setLat] = useState('51.5074');
-  const [lng, setLng] = useState('-0.1278');
+  const [lat, setLat] = useState('30.3165');
+  const [lng, setLng] = useState('78.0322');
   const [subtotal, setSubtotal] = useState('20');
-  const [when, setWhen] = useState(
-    new Date().toISOString().slice(0, 16) // yyyy-MM-ddTHH:mm
-  );
+  const [when, setWhen] = useState(() => {
+    // datetime-local wants LOCAL time; toISOString() is UTC (5.5h off for IST)
+    const d = new Date();
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  });
   const [result, setResult] = useState<any | null>(null);
 
   const probe = useMutation({

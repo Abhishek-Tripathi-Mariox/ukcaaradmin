@@ -17,13 +17,8 @@ export default function ForgotPasswordPage() {
     }
     setLoading(true);
     try {
-      const res = await authAPI.forgotPassword(email);
-      const devOtp = res.data?.devOtp;
-      toast.success(
-        devOtp
-          ? `Reset code sent. Dev OTP: ${devOtp}`
-          : 'If an account exists for that email, a reset code has been sent.'
-      );
+      await authAPI.forgotPassword(email);
+      toast.success('If an account exists for that email, a reset code has been sent.');
       navigate(`/reset-password?email=${encodeURIComponent(email)}`);
     } catch (err: any) {
       toast.error(err.response?.data?.message || 'Failed to send reset code');

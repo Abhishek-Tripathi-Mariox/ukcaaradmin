@@ -28,7 +28,7 @@ export default function RechargeOffersPage() {
   const [creating, setCreating] = useState(false);
   const [deleting, setDeleting] = useState<RechargeOffer | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: [QUERY_KEY],
     queryFn: async () =>
       (await rechargeOffersAPI.list()).data?.data?.offers as RechargeOffer[] | undefined,
@@ -52,7 +52,10 @@ export default function RechargeOffersPage() {
         title="Recharge Offers"
         subtitle="Wallet top-up denominations shown in the customer app, with bonus credit and discounts"
         actions={
-          <RefreshButton onRefresh={() => qc.refetchQueries({ queryKey: [QUERY_KEY] })} />
+          <RefreshButton
+            onRefresh={() => qc.refetchQueries({ queryKey: [QUERY_KEY] })}
+            isFetching={isFetching}
+          />
         }
       />
 

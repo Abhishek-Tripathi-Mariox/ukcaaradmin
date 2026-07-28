@@ -87,6 +87,9 @@ export interface Ride {
   dropoff: Location;
   stops?: Location[];
   rideType: string;
+  // Category flag from the backend — rideType holds the vehicle-type code,
+  // so "private" is detected via this flag, not rideType.
+  isPrivate?: boolean;
   isScheduled?: boolean;
   scheduledAt?: string;
   vehicleType?: 'standard' | 'comfort' | 'xl';
@@ -173,6 +176,8 @@ export interface PromoCode {
   maxUses: number;
   usedCount: number;
   maxUsesPerUser: number;
+  /** Model field; older responses may only carry minRideAmount. */
+  minFare?: number;
   minRideAmount: number;
   maxDiscount?: number;
   expiresAt: string;

@@ -235,12 +235,11 @@ export default function RidesPage() {
     if (statusFilter) params.status = statusFilter;
     if (rideTypeFilter) params.rideType = rideTypeFilter;
     if (paymentFilter) params.paymentMethod = paymentFilter;
-    if (startDate) {
-      params.startDate = new Date(`${startDate}T00:00:00`).toISOString();
-    }
-    if (endDate) {
-      params.endDate = new Date(`${endDate}T23:59:59.999`).toISOString();
-    }
+    // Send the raw YYYY-MM-DD strings — converting local midnight to a UTC
+    // ISO string shifted the day boundary for IST admins. The backend
+    // interprets these as inclusive day bounds.
+    if (startDate) params.startDate = startDate;
+    if (endDate) params.endDate = endDate;
     if (debouncedText.minFare) params.minFare = Number(debouncedText.minFare);
     if (debouncedText.maxFare) params.maxFare = Number(debouncedText.maxFare);
     return params;
@@ -288,8 +287,8 @@ export default function RidesPage() {
   const matchesCategory = (ride: Ride) => {
     if (!rideTypeFilter) return true;
     if (rideTypeFilter === 'scheduled') return !!ride.isScheduled;
-    if (rideTypeFilter === 'private') return ride.rideType === 'private';
-    if (rideTypeFilter === 'instant') return !ride.isScheduled && ride.rideType !== 'private';
+    if (rideTypeFilter === 'private') return ride.isPrivate === true;
+    if (rideTypeFilter === 'instant') return !ride.isScheduled && !ride.isPrivate;
     return ride.rideType === rideTypeFilter;
   };
   const liveRides: Ride[] = (data?.data || []).filter((ride: Ride) => {
@@ -412,11 +411,11 @@ export default function RidesPage() {
           <span className={`inline-block mt-1 text-xs px-2 py-0.5 rounded-full font-medium ${
             ride.isScheduled
               ? 'bg-blue-100 text-blue-700'
-              : ride.rideType === 'private'
+              : ride.isPrivate === true
               ? 'bg-purple-100 text-purple-700'
               : 'bg-green-100 text-green-700'
           }`}>
-            {ride.isScheduled ? 'Scheduled' : ride.rideType === 'private' ? 'Private' : 'Instant'}
+            {ride.isScheduled ? 'Scheduled' : ride.isPrivate === true ? 'Private' : 'Instant'}
           </span>
         </div>
       ),
@@ -1108,13 +1107,15 @@ export default function RidesPage() {
               );
             })()}
 
-            {selectedRide.dispute && (
+            {/* Mongoose materialises an empty `dispute` object on every ride,
+                so gate on the fields only real disputes carry. */}
+            {(selectedRide.dispute?.reason || selectedRide.dispute?.status === 'resolved') && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <h4 className="font-medium text-red-900 mb-2 flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4" />
                   Dispute
                 </h4>
-                <p className="text-sm text-red-800">{selectedRide.dispute.reason}</p>
+                <p className="text-sm text-red-800">{selectedRide.dispute.reason || 'Flagged for review'}</p>
                 {selectedRide.dispute.resolution && (
                   <p className="text-sm text-red-700 mt-2">
                     <strong>Resolution:</strong> {selectedRide.dispute.resolution}
@@ -1544,7 +1545,7 @@ export default function RidesPage() {
           {selectedRide?.dispute && (
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-sm font-medium text-red-900">Dispute Reason:</div>
-              <div className="text-sm text-red-800">{selectedRide.dispute.reason}</div>
+              <div className="text-sm text-red-800">{selectedRide.dispute.reason || 'Flagged for review'}</div>
             </div>
           )}
           <div>

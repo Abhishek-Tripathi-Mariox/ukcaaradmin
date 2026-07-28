@@ -4,10 +4,12 @@ import L from 'leaflet';
 import { MapContainer, TileLayer, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Flame } from 'lucide-react';
-import { reportsAPI } from '@/services/api';
+import { reportsAPI, vehicleTypesAPI } from '@/services/api';
+import type { CatalogueType } from '@/services/api';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
-const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946]; // Bengaluru
+// Dehradun — UKCAAR's service area is Uttarakhand (the 'UK' in UKCAAR).
+const DEFAULT_CENTER: [number, number] = [30.3165, 78.0322];
 
 interface HeatPoint {
   lat: number;
@@ -144,6 +146,17 @@ export default function HeatmapPage() {
 
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
+  // Real vehicle-type catalogue for the ride-type filter — the codes are
+  // admin-managed, not a hardcoded legacy list.
+  const vehicleTypesQ = useQuery({
+    queryKey: ['admin-vehicle-types'],
+    queryFn: async () =>
+      (await vehicleTypesAPI.list()).data?.data?.types as CatalogueType[] | undefined,
+  });
+  const vehicleTypes: CatalogueType[] = Array.isArray(vehicleTypesQ.data)
+    ? vehicleTypesQ.data
+    : [];
+
   const q = useQuery({
     queryKey: ['heatmap', type, days, status, rideType, precision],
     queryFn: async () =>
@@ -202,6 +215,7 @@ export default function HeatmapPage() {
             <option value="completed">Completed</option>
             <option value="cancelled">Cancelled</option>
             <option value="in_progress">In progress</option>
+            <option value="payment_pending">Payment Pending</option>
             <option value="searching">Searching</option>
           </select>
         </Field>
@@ -211,12 +225,12 @@ export default function HeatmapPage() {
             onChange={(e) => setRideType(e.target.value)}
             className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
           >
-            <option value="">All</option>
-            <option value="economy">Economy</option>
-            <option value="comfort">Comfort</option>
-            <option value="premium">Premium</option>
-            <option value="xl">XL</option>
-            <option value="electric">Electric</option>
+            <option value="">All types</option>
+            {vehicleTypes.map((v) => (
+              <option key={v.code} value={v.code}>
+                {v.name}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Grid precision">

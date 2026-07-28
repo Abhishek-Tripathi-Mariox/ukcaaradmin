@@ -168,10 +168,27 @@ function ExportCard({ type }: { type: ExportType }) {
       Object.entries(filterValues).forEach(([k, v]) => {
         if (v) params[k] = v;
       });
-      await reportsAPI.downloadCsv(type.key, params);
-      toast.success(`${type.label} export downloaded`);
+      const downloaded = await reportsAPI.downloadCsv(type.key, params);
+      if (downloaded) {
+        toast.success(`${type.label} export downloaded`);
+      } else {
+        toast.error('No records match the selected filters.');
+      }
     } catch (e: any) {
-      toast.error(e.response?.data?.message || 'Export failed');
+      // Error responses arrive as Blobs (responseType: 'blob') — decode to get
+      // the server's message.
+      let message = 'Export failed';
+      const data = e.response?.data;
+      if (data instanceof Blob) {
+        try {
+          message = JSON.parse(await data.text())?.message || message;
+        } catch {
+          // non-JSON error body; keep fallback
+        }
+      } else if (data?.message) {
+        message = data.message;
+      }
+      toast.error(message);
     } finally {
       setDownloading(false);
     }

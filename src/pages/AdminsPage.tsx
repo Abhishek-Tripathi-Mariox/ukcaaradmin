@@ -178,7 +178,15 @@ export default function AdminsPage() {
           <button
             className="p-2 hover:bg-gray-100 rounded"
             disabled={!canManage}
-            onClick={() => resetMut.mutate(a._id)}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Reset this admin's password? Their current session will be signed out."
+                )
+              ) {
+                resetMut.mutate(a._id);
+              }
+            }}
             title="Reset password"
           >
             <KeyRound className="w-4 h-4" />
@@ -459,7 +467,14 @@ function EditModal({
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit(form);
+          // Backend rejects any self-update containing adminRole, so omit it
+          // when editing your own account (name edits still go through).
+          if (isSelf) {
+            const { adminRole: _omit, ...rest } = form;
+            onSubmit(rest);
+          } else {
+            onSubmit(form);
+          }
         }}
         className="space-y-4"
       >

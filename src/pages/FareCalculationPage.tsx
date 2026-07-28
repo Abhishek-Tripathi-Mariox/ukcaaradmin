@@ -19,7 +19,6 @@ interface VehicleFareConfig {
   perKm: number;     // rate per kilometre
   perMin: number;    // rate per minute
   minFare: number;   // minimum billable fare
-  surgeMultiplier: number;
 }
 
 interface FareSettings {
@@ -36,15 +35,16 @@ const DEFAULT_CONFIG: VehicleFareConfig = {
   perKm: 12,
   perMin: 1.5,
   minFare: 40,
-  surgeMultiplier: 1.0,
 };
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
+// Surge is intentionally excluded: it is resolved per-zone at booking time,
+// so the preview matches the pre-surge fare riders are quoted.
 function calcFare(cfg: VehicleFareConfig, km: number, minutes: number): number {
   if (cfg.pricingModel === 'subscription') return cfg.flatFare;
   const raw = cfg.base + cfg.perKm * km + cfg.perMin * minutes;
-  return Math.max(cfg.minFare, raw) * cfg.surgeMultiplier;
+  return Math.max(cfg.minFare, raw);
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -209,7 +209,12 @@ function VehicleCard({
               <FareRow label="Per Km" field="perKm" value={config.perKm} onChange={handleField} prefix="₹" />
               <FareRow label="Per Minute" field="perMin" value={config.perMin} onChange={handleField} prefix="₹" step={0.1} />
               <FareRow label="Minimum Fare" field="minFare" value={config.minFare} onChange={handleField} prefix="₹" />
-              <FareRow label="Surge Multiplier" field="surgeMultiplier" value={config.surgeMultiplier} onChange={handleField} step={0.1} />
+              <div className="flex items-center gap-3">
+                <label className="w-36 text-sm text-gray-600 shrink-0">Surge Multiplier</label>
+                <span className="flex-1 text-sm text-gray-400 py-2">
+                  ×1.0 — set via Zones &amp; Surge
+                </span>
+              </div>
             </>
           )}
         </div>
@@ -302,7 +307,9 @@ function FareCalculator({
 
       {entries.length > 0 && (
         <p className="text-[11px] text-gray-400 mt-3">
-          Formula: Base + (Per Km × {km} km) + (Per Min × {minutes} min) × Surge, min = Min Fare
+          Formula: max(Min Fare, Base + Per Km × km + Per Min × min)
+          <br />
+          (zone surge &amp; surcharges applied at booking time)
         </p>
       )}
     </div>
@@ -363,7 +370,6 @@ export default function FareCalculationPage() {
         perKm: s.perKm ?? DEFAULT_CONFIG.perKm,
         perMin: s.perMin ?? DEFAULT_CONFIG.perMin,
         minFare: s.minFare ?? DEFAULT_CONFIG.minFare,
-        surgeMultiplier: s.surgeMultiplier ?? DEFAULT_CONFIG.surgeMultiplier,
       };
     });
     return result;
@@ -384,7 +390,6 @@ export default function FareCalculationPage() {
         // fraction. Cancellation fee is a flat ₹ amount.
         commission: effectiveCommissionPct,
         cancellationFee: effectiveCancellationFee,
-        minFare: Math.min(...Object.values(effectiveConfig).map((c) => c.minFare)),
       }),
     onSuccess: () => {
       toast.success('Fare configuration saved');

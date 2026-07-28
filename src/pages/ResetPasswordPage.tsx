@@ -56,7 +56,7 @@ export default function ResetPasswordPage() {
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Reset password</h2>
           <p className="text-sm text-gray-500 mb-6">
             Enter the 6-digit code from your email plus a new password.{' '}
-            <span className="text-gray-400">(Dev OTP: 115566)</span>
+
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-5">

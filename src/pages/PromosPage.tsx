@@ -37,7 +37,7 @@ export default function PromosPage() {
     value: 0,
     maxUses: 100,
     maxUsesPerUser: 1,
-    minRideAmount: 0,
+    minFare: 0,
     maxDiscount: 0,
     expiresAt: '',
     description: '',
@@ -132,7 +132,7 @@ export default function PromosPage() {
       value: 0,
       maxUses: 100,
       maxUsesPerUser: 1,
-      minRideAmount: 0,
+      minFare: 0,
       maxDiscount: 0,
       expiresAt: '',
       description: '',
@@ -149,7 +149,7 @@ export default function PromosPage() {
       value: promo.value,
       maxUses: promo.maxUses,
       maxUsesPerUser: promo.maxUsesPerUser,
-      minRideAmount: promo.minRideAmount,
+      minFare: promo.minFare ?? promo.minRideAmount ?? 0,
       maxDiscount: promo.maxDiscount || 0,
       expiresAt: promo.expiresAt ? format(new Date(promo.expiresAt), "yyyy-MM-dd'T'HH:mm") : '',
       description: promo.description || '',
@@ -162,10 +162,14 @@ export default function PromosPage() {
     if (e && e.preventDefault) e.preventDefault();
     if (e && e.stopPropagation) e.stopPropagation();
 
+    if (!(Number(formData.value) > 0)) {
+      toast.error('Value must be greater than 0');
+      return;
+    }
+
     const data: any = {
       ...formData,
-      minFare: Number(formData.minRideAmount) || 0,
-      minRideAmount: Number(formData.minRideAmount) || 0,
+      minFare: Number(formData.minFare) || 0,
       expiresAt: formData.expiresAt
         ? new Date(formData.expiresAt).toISOString()
         : new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
@@ -419,7 +423,7 @@ export default function PromosPage() {
               </div>
               <div className="bg-gray-50 rounded-lg p-4">
                 <div className="text-sm text-gray-500">Per User</div>
-                <div className="text-lg font-semibold">{selectedPromo.maxUsesPerUser}</div>
+                <div className="text-lg font-semibold">{selectedPromo.maxUsesPerUser ?? 'Unlimited'}</div>
               </div>
             </div>
 
@@ -428,7 +432,7 @@ export default function PromosPage() {
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-500">Min Ride Amount:</span>
-                  <span className="ml-2">₹{selectedPromo.minRideAmount}</span>
+                  <span className="ml-2">₹{selectedPromo.minFare ?? selectedPromo.minRideAmount ?? 0}</span>
                 </div>
                 {selectedPromo.maxDiscount && (
                   <div>
@@ -568,7 +572,7 @@ export default function PromosPage() {
                 value={formData.value}
                 onChange={(e) => setFormData({ ...formData, value: Number(e.target.value) })}
                 className="input"
-                min={0}
+                min={1}
               />
             </div>
             <div>
@@ -604,8 +608,8 @@ export default function PromosPage() {
               </label>
               <input
                 type="number"
-                value={formData.minRideAmount}
-                onChange={(e) => setFormData({ ...formData, minRideAmount: Number(e.target.value) })}
+                value={formData.minFare}
+                onChange={(e) => setFormData({ ...formData, minFare: Number(e.target.value) })}
                 className="input"
                 min={0}
                 step="0.01"
@@ -614,21 +618,20 @@ export default function PromosPage() {
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            {formData.type === 'percentage' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Max Discount (₹)
-                </label>
-                <input
-                  type="number"
-                  value={formData.maxDiscount}
-                  onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
-                  className="input"
-                  min={0}
-                  step="0.01"
-                />
-              </div>
-            )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Max Discount (₹)
+              </label>
+              <input
+                type="number"
+                value={formData.maxDiscount || ''}
+                onChange={(e) => setFormData({ ...formData, maxDiscount: Number(e.target.value) })}
+                className="input"
+                min={0}
+                step="0.01"
+              />
+              <p className="text-xs text-gray-400 mt-1">Leave blank for no cap</p>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Expires At

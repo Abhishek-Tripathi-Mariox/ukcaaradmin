@@ -178,19 +178,19 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
                   )}
                   {singularLabel === 'vehicle type' && (
                     <td className="px-3 py-2 text-xs text-gray-600">
-                      {row.baseFare != null || row.perKmFare != null || row.perMinFare != null ? (
-                        <span>
-                          {row.baseFare != null ? `₹${row.baseFare} base` : ''}
-                          {row.perKmFare != null
-                            ? `${row.baseFare != null ? ' · ' : ''}₹${row.perKmFare}/km`
-                            : ''}
-                          {row.perMinFare != null
-                            ? `${row.baseFare != null || row.perKmFare != null ? ' · ' : ''}₹${row.perMinFare}/min`
-                            : ''}
-                        </span>
-                      ) : (
-                        <span className="text-gray-400">Default</span>
-                      )}
+                      {(() => {
+                        const parts = [
+                          row.baseFare != null ? `₹${row.baseFare} base` : null,
+                          row.perKmFare != null ? `₹${row.perKmFare}/km` : null,
+                          row.perMinFare != null ? `₹${row.perMinFare}/min` : null,
+                          row.minFare != null ? `₹${row.minFare} min` : null,
+                        ].filter(Boolean);
+                        return parts.length ? (
+                          <span>{parts.join(' · ')}</span>
+                        ) : (
+                          <span className="text-gray-400">Default</span>
+                        );
+                      })()}
                     </td>
                   )}
                   <td className="px-3 py-2 text-center text-gray-500">
@@ -289,17 +289,19 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
   // Pricing fields — vehicle-type only. We track each as a string so the
   // input can hold a blank state (= "not configured, use fallback"); the
   // submit handler parses to number or leaves undefined.
-  const fmt = (v: number | undefined) => (v === undefined || v === null ? '' : String(v));
+  const fmt = (v: number | null | undefined) => (v === undefined || v === null ? '' : String(v));
   const [baseFare, setBaseFare] = useState(fmt(initial?.baseFare));
   const [perKmFare, setPerKmFare] = useState(fmt(initial?.perKmFare));
   const [perMinFare, setPerMinFare] = useState(fmt(initial?.perMinFare));
   const [minFare, setMinFare] = useState(fmt(initial?.minFare));
 
-  const parseFare = (v: string): number | undefined => {
+  // Blank → null: the backend unsets the field on null, so a set fare
+  // (or description) can actually be cleared. undefined would be JSON-dropped.
+  const parseFare = (v: string): number | null => {
     const t = v.trim();
-    if (!t) return undefined;
+    if (!t) return null;
     const n = parseFloat(t);
-    return Number.isFinite(n) && n >= 0 ? n : undefined;
+    return Number.isFinite(n) && n >= 0 ? n : null;
   };
 
   const submit = (e: React.FormEvent) => {
@@ -309,7 +311,7 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
       name: name.trim(),
       // Empty code → backend will auto-slugify from name
       code: code.trim() || undefined,
-      description: description.trim() || undefined,
+      description: description.trim() || null,
       sortOrder,
       isActive,
       ...(isVehicleType

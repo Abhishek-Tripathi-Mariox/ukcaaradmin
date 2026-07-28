@@ -7,20 +7,27 @@ import { Search, MessageSquare, User } from 'lucide-react';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 
+const OBJECT_ID_RE = /^[0-9a-fA-F]{24}$/;
+
 export default function ChatPage() {
   const [rideId, setRideId] = useState('');
+  // Only query on explicit submit — keying on the live input fired a request
+  // per keystroke and 500'd the backend on partial ids.
+  const [submittedId, setSubmittedId] = useState('');
   const [selectedChat, setSelectedChat] = useState<any>(null);
   const [showMessages, setShowMessages] = useState(false);
 
+  const isValidSubmittedId = OBJECT_ID_RE.test(submittedId);
+
   const { data: chat, isLoading, refetch } = useQuery({
-    queryKey: ['chat', rideId],
+    queryKey: ['chat', submittedId],
     queryFn: async () => {
-      if (!rideId) return null;
+      if (!OBJECT_ID_RE.test(submittedId)) return null;
       // Backend returns { data: { chat } } with messages embedded on the chat.
-      const res = await chatAPI.getByRideId(rideId);
+      const res = await chatAPI.getByRideId(submittedId);
       return res.data.data.chat;
     },
-    enabled: !!rideId,
+    enabled: isValidSubmittedId,
   });
 
   // Map participant id → role so we can tell customer vs driver bubbles.
@@ -34,8 +41,11 @@ export default function ChatPage() {
   const messages: any[] = selectedChat?.messages ?? [];
 
   const handleSearch = () => {
-    if (rideId) {
+    const trimmed = rideId.trim();
+    if (trimmed === submittedId && OBJECT_ID_RE.test(trimmed)) {
       refetch();
+    } else {
+      setSubmittedId(trimmed);
     }
   };
 
@@ -66,6 +76,11 @@ export default function ChatPage() {
             Search
           </button>
         </div>
+        {submittedId && !isValidSubmittedId && (
+          <p className="text-sm text-red-600 mt-2">
+            Enter the full 24-character ride ID
+          </p>
+        )}
       </div>
 
       {/* Chat Results */}
@@ -86,7 +101,7 @@ export default function ChatPage() {
               </div>
               <div>
                 <div className="font-medium">
-                  Chat for Ride #{rideId.slice(-8).toUpperCase()}
+                  Chat for Ride #{submittedId.slice(-8).toUpperCase()}
                 </div>
                 <div className="text-sm text-gray-500">
                   {chat.messages?.length || 0} messages
@@ -98,7 +113,7 @@ export default function ChatPage() {
             </div>
           </div>
         </div>
-      ) : rideId ? (
+      ) : isValidSubmittedId ? (
         <div className="bg-white rounded-xl shadow-sm p-12 text-center text-gray-500">
           No chat found for this ride ID
         </div>
@@ -112,7 +127,7 @@ export default function ChatPage() {
       <Modal
         isOpen={showMessages}
         onClose={() => setShowMessages(false)}
-        title={`Chat - Ride #${rideId.slice(-8).toUpperCase()}`}
+        title={`Chat - Ride #${submittedId.slice(-8).toUpperCase()}`}
         size="lg"
       >
         <div className="h-96 overflow-y-auto">

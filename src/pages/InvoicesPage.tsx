@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import toast from 'react-hot-toast';
@@ -38,6 +38,51 @@ export default function InvoicesPage() {
   const [detail, setDetail] = useState<Invoice | null>(null);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
+  // Object URL for the detail modal's PDF, fetched via the authed client so
+  // the JWT never appears in a URL. Revoked when the modal closes.
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!detail) return;
+    let cancelled = false;
+    let objectUrl: string | null = null;
+    financeAPI
+      .getPdfBlob(detail._id)
+      .then((res) => {
+        const url = URL.createObjectURL(
+          new Blob([res.data as BlobPart], { type: 'application/pdf' })
+        );
+        if (cancelled) {
+          URL.revokeObjectURL(url);
+          return;
+        }
+        objectUrl = url;
+        setPdfUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Failed to load invoice PDF');
+      });
+    return () => {
+      cancelled = true;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      setPdfUrl(null);
+    };
+  }, [detail?._id]);
+
+  // One-off open (row action): fetch the blob, open it, revoke after a delay
+  // so the new tab has time to load it.
+  const openPdf = async (id: string) => {
+    try {
+      const res = await financeAPI.getPdfBlob(id);
+      const url = URL.createObjectURL(
+        new Blob([res.data as BlobPart], { type: 'application/pdf' })
+      );
+      window.open(url, '_blank', 'noopener');
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch {
+      toast.error('Failed to load invoice PDF');
+    }
+  };
 
   const listQ = useQuery({
     queryKey: ['invoices', page, type, status],
@@ -148,15 +193,13 @@ export default function InvoicesPage() {
       header: '',
       render: (i: Invoice) => (
         <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
-          <a
-            href={financeAPI.invoicePdfUrl(i._id)}
-            target="_blank"
-            rel="noopener noreferrer"
+          <button
+            onClick={() => openPdf(i._id)}
             className="p-1.5 hover:bg-gray-100 rounded"
             title="Download PDF"
           >
             <Download className="w-4 h-4" />
-          </a>
+          </button>
           {i.status === 'draft' && (
             <button
               onClick={() => issueMut.mutate(i._id)}
@@ -261,20 +304,25 @@ export default function InvoicesPage() {
           size="md"
         >
           <div className="space-y-3 text-sm">
-            <iframe
-              src={financeAPI.invoicePdfUrl(detail._id)}
-              className="w-full h-96 border rounded-lg"
-              title="Invoice PDF"
-            />
+            {pdfUrl ? (
+              <iframe
+                src={pdfUrl}
+                className="w-full h-96 border rounded-lg"
+                title="Invoice PDF"
+              />
+            ) : (
+              <div className="w-full h-96 border rounded-lg flex items-center justify-center text-gray-400">
+                Loading PDF…
+              </div>
+            )}
             <div className="flex justify-end gap-2">
-              <a
-                href={financeAPI.invoicePdfUrl(detail._id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+              <button
+                onClick={() => pdfUrl && window.open(pdfUrl, '_blank', 'noopener')}
+                disabled={!pdfUrl}
+                className="flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm disabled:opacity-50"
               >
                 <Download className="w-4 h-4" /> Download PDF
-              </a>
+              </button>
               {detail.status !== 'cancelled' && (
                 <button
                   onClick={() => { setCancelReason(''); setShowCancelModal(true); }}

@@ -365,8 +365,10 @@ export default function SupportPage() {
             <Search className="w-4 h-4 absolute left-2 top-3 text-gray-400" />
             <input
               value={filters.q}
-              onChange={(e) => setFilters((f) => ({ ...f, q: e.target.value }))}
-              onKeyDown={(e) => e.key === 'Enter' && setPage(1)}
+              onChange={(e) => {
+                setFilters((f) => ({ ...f, q: e.target.value }));
+                setPage(1);
+              }}
               placeholder="Subject or TKT-…"
               className="w-full pl-8 pr-3 py-2 border border-gray-300 rounded-lg text-sm"
             />

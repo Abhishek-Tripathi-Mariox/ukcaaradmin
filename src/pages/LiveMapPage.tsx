@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, Marker, Popup, CircleMarker, useMap } from 'react-leaflet';
 import L from 'leaflet';
@@ -41,20 +41,27 @@ interface LiveRide {
   createdAt: string;
 }
 
-const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946]; // Bengaluru
+// Dehradun — UKCAAR's service area is Uttarakhand (the 'UK' in UKCAAR).
+const DEFAULT_CENTER: [number, number] = [30.3165, 78.0322];
 const DEFAULT_ZOOM = 12;
 
-function FitBounds({ points }: { points: [number, number][] }) {
+// Fits once when points first arrive, then only when `recenterKey` bumps
+// (the Recenter button) — refitting on every 10s poll would yank the
+// admin's pan/zoom.
+function FitBounds({ points, recenterKey }: { points: [number, number][]; recenterKey: number }) {
   const map = useMap();
+  const lastFitKey = useRef<number | null>(null);
   useEffect(() => {
     if (points.length === 0) return;
+    if (lastFitKey.current === recenterKey) return;
+    lastFitKey.current = recenterKey;
     if (points.length === 1) {
       map.setView(points[0], 14);
       return;
     }
     const bounds = L.latLngBounds(points);
     map.fitBounds(bounds, { padding: [40, 40] });
-  }, [points, map]);
+  }, [points, map, recenterKey]);
   return null;
 }
 
@@ -81,6 +88,7 @@ export default function LiveMapPage() {
   const [selectedRideId, setSelectedRideId] = useState<string | null>(null);
   const [showAvailable, setShowAvailable] = useState(true);
   const [showBusy, setShowBusy] = useState(true);
+  const [recenterKey, setRecenterKey] = useState(0);
 
   const driversQ = useQuery({
     queryKey: ['dispatch', 'online-drivers'],
@@ -165,7 +173,14 @@ export default function LiveMapPage() {
               {visibleDrivers.length} drivers · {rides.length} rides
             </span>
           </div>
-          <div className="h-[600px]">
+          <div className="h-[600px] relative">
+            {/* z-index above Leaflet's panes (max 1000) so the button stays clickable */}
+            <button
+              onClick={() => setRecenterKey((k) => k + 1)}
+              className="absolute top-3 right-3 z-[1001] px-3 py-1.5 bg-white border border-gray-300 rounded-lg shadow-sm text-xs font-medium hover:bg-gray-50"
+            >
+              Recenter
+            </button>
             <MapContainer
               center={DEFAULT_CENTER}
               zoom={DEFAULT_ZOOM}
@@ -176,7 +191,7 @@ export default function LiveMapPage() {
                 attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
-              <FitBounds points={allPoints} />
+              <FitBounds points={allPoints} recenterKey={recenterKey} />
 
               {visibleDrivers.map((d) => (
                 <Marker
@@ -198,11 +213,9 @@ export default function LiveMapPage() {
                           {d.vehicle.plate && <span className="ml-1 text-gray-500">({d.vehicle.plate})</span>}
                         </div>
                       )}
-                      {d.rating != null && (
-                        <div className="flex items-center gap-1 text-yellow-600">
-                          <Star className="w-3 h-3" /> {d.rating.toFixed(1)}
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1 text-yellow-600">
+                        <Star className="w-3 h-3" /> {d.rating ? d.rating.toFixed(1) : 'New'}
+                      </div>
                       <div>
                         <StatusBadge status={d.busy ? 'busy' : 'available'} variant={d.busy ? 'warning' : 'success'} />
                       </div>

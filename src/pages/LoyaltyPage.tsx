@@ -355,6 +355,7 @@ function TierFormModal({
           <Field label="Min lifetime points">
             <input
               type="number"
+              min={0}
               value={form.minLifetimePoints}
               onChange={(e) =>
                 setForm({ ...form, minLifetimePoints: Number(e.target.value) })
@@ -588,15 +589,17 @@ function RewardFormModal({
         type: form.type,
         pointsCost: Number(form.pointsCost),
         value: Number(form.value),
+        // Blank optional fields send null (undefined is JSON-dropped and
+        // would silently never clear a previously set value)
         maxRedemptionsPerUser: form.maxRedemptionsPerUser
           ? Number(form.maxRedemptionsPerUser)
-          : undefined,
+          : null,
         totalRedemptionLimit: form.totalRedemptionLimit
           ? Number(form.totalRedemptionLimit)
-          : undefined,
-        minTierKey: form.minTierKey || undefined,
-        validFrom: form.validFrom || undefined,
-        validUntil: form.validUntil || undefined,
+          : null,
+        minTierKey: form.minTierKey || null,
+        validFrom: form.validFrom || null,
+        validUntil: form.validUntil || null,
         active: form.active,
       };
       if (reward) {

@@ -106,7 +106,7 @@ export default function LoginPage() {
         </div>
 
         <p className="text-center text-primary-200 text-sm mt-6">
-          © 2024 UKCAAR. All rights reserved.
+          © 2026 UKCAAR. All rights reserved.
         </p>
       </div>
     </div>

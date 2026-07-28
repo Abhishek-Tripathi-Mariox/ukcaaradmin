@@ -51,7 +51,11 @@ export default function SettingsPage() {
 
   const updateGeneralMutation = useMutation({
     mutationFn: (data: any) => settingsAPI.updateGeneral(data),
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // The server clamps some values (driverTimeout 10-120, maxSearchRadius
+      // 1-50) — rehydrate the form from the saved settings it returns.
+      const saved = res.data?.data;
+      if (saved) setGeneralForm(saved);
       queryClient.invalidateQueries({ queryKey: ['settings', 'general'] });
       toast.success('General settings updated');
     },

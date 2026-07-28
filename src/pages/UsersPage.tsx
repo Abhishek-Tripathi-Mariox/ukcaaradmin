@@ -193,10 +193,16 @@ export default function UsersPage() {
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              updateStatusMutation.mutate({
-                id: user._id,
-                isActive: !user.isActive,
-              });
+              if (user.isActive) {
+                // Deactivation is destructive (kills the user's session) — confirm via modal.
+                setSelectedUser(user);
+                setShowStatusModal(true);
+              } else if (window.confirm('Reactivate this user?')) {
+                updateStatusMutation.mutate({
+                  id: user._id,
+                  isActive: true,
+                });
+              }
             }}
             className="p-2 hover:bg-gray-100 rounded-lg"
             title={user.isActive ? 'Deactivate user' : 'Activate user'}
@@ -640,7 +646,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
                         {r.pickup?.address || r.pickupLocation?.address || '—'}
                       </div>
                       <div className="truncate max-w-xs text-gray-500">
-                        → {r.drop?.address || r.dropLocation?.address || '—'}
+                        → {r.dropoff?.address || r.drop?.address || r.dropLocation?.address || '—'}
                       </div>
                     </td>
                     <td className="px-2 py-2">
