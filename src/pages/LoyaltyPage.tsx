@@ -82,6 +82,44 @@ function OverviewTab() {
   const s = q.data ?? {};
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {/* Self-documenting summary of the engine so admins don't need the
+          codebase to understand what tiers/points actually do. */}
+      <div className="col-span-2 md:col-span-4 bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-900">
+        <h3 className="font-semibold mb-2">How points and tiers work</h3>
+        <ul className="space-y-1 list-disc pl-5">
+          <li>
+            <span className="font-medium">Earning:</span> customers earn points automatically when a
+            ride completes — 0.1 points per rupee of the final fare (a Rs 200 ride earns 20 points).
+            Cancelled or unpaid rides earn nothing.
+          </li>
+          <li>
+            <span className="font-medium">Two balances:</span> spendable points go down on
+            redemption; lifetime points only ever go up. Tiers are decided by LIFETIME points, so
+            redeeming rewards never demotes anyone.
+          </li>
+          <li>
+            <span className="font-medium">Tier promotion is automatic:</span> after every points
+            change the customer is placed in the highest active tier whose minimum lifetime points
+            they meet. There is no manual tier assignment — adjust points on the Accounts tab to
+            move someone.
+          </li>
+          <li>
+            <span className="font-medium">Tier effects:</span> the earn multiplier boosts points per
+            ride (1.5 = +50%); the ride discount % is applied automatically to every ride at that
+            tier and stacks with promos and redeemed vouchers — set it conservatively.
+          </li>
+          <li>
+            <span className="font-medium">Rewards:</span> wallet credits pay out instantly; other
+            reward types become a voucher the app auto-applies to the customer's next eligible
+            booking. Cancelling a redemption (Redemptions tab) refunds its points.
+          </li>
+          <li>
+            <span className="font-medium">Keep one base tier at 0 lifetime points</span> — otherwise
+            new customers have no tier, no multiplier and no discount until they cross the first
+            threshold.
+          </li>
+        </ul>
+      </div>
       <Stat
         label="Total accounts"
         value={s.totalAccounts ?? 0}

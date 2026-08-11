@@ -12,6 +12,67 @@ type RouteType = 'private' | 'scheduled';
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
+const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
+
+type ScheduleTimingKey =
+  | 'bookingCutoffMinutes'
+  | 'maxAdvanceBookingDays'
+  | 'startWindowMinutes'
+  | 'minRestMinutes'
+  | 'cancellationCutoffMinutes';
+
+/** Optional per-route timing overrides. Empty input = platform default
+ *  (the field is omitted from the payload). Ranges mirror the backend. */
+const TIMING_FIELDS: Array<{
+  key: ScheduleTimingKey;
+  label: string;
+  min: number;
+  max: number;
+  defaultValue: number;
+  hint: string;
+}> = [
+  {
+    key: 'bookingCutoffMinutes',
+    label: 'Booking cutoff (minutes)',
+    min: 0,
+    max: 720,
+    defaultValue: 10,
+    hint: 'Customer bookings close this many minutes before each departure.',
+  },
+  {
+    key: 'maxAdvanceBookingDays',
+    label: 'Advance booking window (days)',
+    min: 1,
+    max: 60,
+    defaultValue: 14,
+    hint: 'Customers can book seats up to this many days ahead.',
+  },
+  {
+    key: 'startWindowMinutes',
+    label: 'Start window (minutes)',
+    min: 5,
+    max: 720,
+    defaultValue: 30,
+    hint: 'Drivers can start the journey this many minutes before the departure time.',
+  },
+  {
+    key: 'minRestMinutes',
+    label: 'Minimum rest (minutes)',
+    min: 0,
+    max: 1440,
+    defaultValue: 0,
+    hint: 'Minimum rest a driver must take after completing this route before starting their next journey. Set this on long routes.',
+  },
+  {
+    key: 'cancellationCutoffMinutes',
+    label: 'Cancellation cutoff (minutes)',
+    min: 0,
+    max: 1440,
+    defaultValue: 60,
+    hint: 'Free cancellation closes this many minutes before departure.',
+  },
+];
+
 interface Stop {
   name: string;
   address?: string;
@@ -45,6 +106,13 @@ interface RouteForm {
     seatPrice?: number;
     vehicleType?: string;
     totalSeats?: number;
+    /** Timing overrides — undefined means "use the platform default" and
+     *  the key is omitted from the save payload entirely. */
+    bookingCutoffMinutes?: number;
+    maxAdvanceBookingDays?: number;
+    startWindowMinutes?: number;
+    minRestMinutes?: number;
+    cancellationCutoffMinutes?: number;
   };
 }
 
@@ -61,12 +129,14 @@ const emptyStop = (i: number): Stop => ({
 const blankForm = (): RouteForm => ({
   name: '',
   description: '',
-  type: 'private',
+  type: 'scheduled',
   isActive: true,
   corridorBufferMeters: 1500,
   stops: [emptyStop(0), emptyStop(1)],
   schedule: {
-    daysOfWeek: [1, 2, 3, 4, 5],
+    // New scheduled routes start with every day selected — the admin
+    // deselects the days the shuttle does not run.
+    daysOfWeek: [...ALL_DAYS],
     departures: [],
     returnDepartures: [],
     seatPrice: 0,
@@ -113,7 +183,7 @@ export default function RoutesPage() {
     <div>
       <PageHeader
         title="Routes"
-        subtitle="Curated corridors used by Private and Scheduled (shuttle) ride products"
+        subtitle="Shuttle corridors with fixed stops, departure times and seat inventory"
         actions={
           <div className="flex gap-2">
             <RefreshButton onRefresh={refetch} isFetching={isFetching} />
@@ -344,12 +414,40 @@ function toFormValue(r: any): RouteForm {
           }))
         : [emptyStop(0), emptyStop(1)],
     schedule: {
-      daysOfWeek: r.schedule?.daysOfWeek ?? [1, 2, 3, 4, 5],
+      // Legacy routes could carry an empty daysOfWeek, which downstream code
+      // inverted to "runs every day" — hydrate that as all 7 selected so the
+      // form shows the effective behaviour and saves it explicitly.
+      daysOfWeek:
+        Array.isArray(r.schedule?.daysOfWeek) && r.schedule.daysOfWeek.length > 0
+          ? r.schedule.daysOfWeek
+          : [...ALL_DAYS],
       departures: r.schedule?.departures ?? [],
       returnDepartures: r.schedule?.returnDepartures ?? [],
       seatPrice: r.schedule?.seatPrice ?? 0,
       vehicleType: r.schedule?.vehicleType ?? '',
       totalSeats: r.schedule?.totalSeats ?? 0,
+      // Timing overrides round-trip into the form; absent stays absent so an
+      // untouched save doesn't pin the current platform default onto the route.
+      bookingCutoffMinutes:
+        typeof r.schedule?.bookingCutoffMinutes === 'number'
+          ? r.schedule.bookingCutoffMinutes
+          : undefined,
+      maxAdvanceBookingDays:
+        typeof r.schedule?.maxAdvanceBookingDays === 'number'
+          ? r.schedule.maxAdvanceBookingDays
+          : undefined,
+      startWindowMinutes:
+        typeof r.schedule?.startWindowMinutes === 'number'
+          ? r.schedule.startWindowMinutes
+          : undefined,
+      minRestMinutes:
+        typeof r.schedule?.minRestMinutes === 'number'
+          ? r.schedule.minRestMinutes
+          : undefined,
+      cancellationCutoffMinutes:
+        typeof r.schedule?.cancellationCutoffMinutes === 'number'
+          ? r.schedule.cancellationCutoffMinutes
+          : undefined,
     },
   };
 }
@@ -376,6 +474,8 @@ function RouteFormModal({
     stopFields?: Record<number, string>;
     schedule?: string;
     departures?: string;
+    days?: string;
+    timing?: Partial<Record<ScheduleTimingKey, string>>;
   }>({});
   const isScheduled = form.type === 'scheduled';
 
@@ -408,6 +508,9 @@ function RouteFormModal({
       if ((Number(form.schedule?.totalSeats) || 0) < 1) {
         next.schedule = 'Total seats must be at least 1';
       }
+      if ((form.schedule?.daysOfWeek ?? []).length === 0) {
+        next.days = 'A scheduled route must run on at least one day of the week';
+      }
       const deps = form.schedule?.departures ?? [];
       if (deps.length === 0) {
         next.departures = 'Add at least one departure for a scheduled route';
@@ -417,6 +520,15 @@ function RouteFormModal({
         );
         if (bad) next.departures = 'Each departure needs a valid HH:MM time';
       }
+      const timing: Partial<Record<ScheduleTimingKey, string>> = {};
+      for (const tf of TIMING_FIELDS) {
+        const v = form.schedule?.[tf.key];
+        if (v === undefined) continue; // empty box = platform default
+        if (!Number.isInteger(v) || v < tf.min || v > tf.max) {
+          timing[tf.key] = `Enter a whole number between ${tf.min} and ${tf.max}, or leave empty for the default`;
+        }
+      }
+      if (Object.keys(timing).length) next.timing = timing;
     }
 
     setErrors(next);
@@ -456,6 +568,15 @@ function RouteFormModal({
           vehicleType: form.schedule?.vehicleType?.trim() || undefined,
           totalSeats: Number(form.schedule?.totalSeats) || 0,
         };
+        // Timing overrides: only send fields the admin actually filled in.
+        // An empty box must NOT become 0 — omitting the key keeps the route
+        // on the platform default.
+        for (const tf of TIMING_FIELDS) {
+          const v = form.schedule?.[tf.key];
+          if (typeof v === 'number' && Number.isFinite(v)) {
+            payload.schedule[tf.key] = v;
+          }
+        }
       }
       return editingId
         ? routesAPI.update(editingId, payload)
@@ -487,6 +608,16 @@ function RouteFormModal({
     setForm((f) => ({ ...f, stops: [...f.stops, emptyStop(f.stops.length)] }));
 
   const toggleDay = (d: number) => {
+    const current = form.schedule?.daysOfWeek ?? [];
+    // A scheduled route must keep at least one running day — deselecting the
+    // last one would (via a legacy quirk) flip the route to "runs every day".
+    if (current.includes(d) && current.length === 1) {
+      setErrors((p) => ({
+        ...p,
+        days: 'A scheduled route must run on at least one day of the week',
+      }));
+      return;
+    }
     setForm((f) => {
       const days = f.schedule?.daysOfWeek ?? [];
       return {
@@ -499,6 +630,7 @@ function RouteFormModal({
         },
       };
     });
+    if (errors.days) setErrors((p) => ({ ...p, days: undefined }));
   };
 
   const addDeparture = () =>
@@ -605,7 +737,14 @@ function RouteFormModal({
                 setForm((f) => ({ ...f, type: e.target.value as RouteType }))
               }
             >
-              <option value="private">Private (curated drivers + assigned users)</option>
+              {/* 'private' routes are consumed by no runtime flow (private
+                  rides dispatch by vehicle-type tier, not routes), so the
+                  option is hidden for new routes. It still renders when
+                  editing a legacy private route so saving doesn't silently
+                  flip its type. */}
+              {form.type === 'private' && (
+                <option value="private">Private (legacy, unused by live flows)</option>
+              )}
               <option value="scheduled">Scheduled (shuttle, fixed seats &amp; times)</option>
             </select>
           </div>
@@ -859,6 +998,61 @@ function RouteFormModal({
                   );
                 })}
               </div>
+              {errors.days && (
+                <p className="text-[11px] text-red-600 mt-1">{errors.days}</p>
+              )}
+            </div>
+
+            <div className="mt-3">
+              <label className="text-xs text-gray-600 block mb-1">
+                Timing rules
+              </label>
+              <p className="text-[11px] text-gray-500 mb-2">
+                All times are IST. Leave a field empty to use the platform
+                default.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {TIMING_FIELDS.map((tf) => (
+                  <div key={tf.key}>
+                    <label className="text-xs text-gray-600">{tf.label}</label>
+                    <input
+                      type="number"
+                      min={tf.min}
+                      max={tf.max}
+                      step={1}
+                      className={`input ${errors.timing?.[tf.key] ? 'input-error' : ''}`}
+                      placeholder={`Default: ${tf.defaultValue}`}
+                      aria-invalid={!!errors.timing?.[tf.key]}
+                      value={form.schedule?.[tf.key] ?? ''}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        setForm((f) => ({
+                          ...f,
+                          schedule: {
+                            ...(f.schedule ?? {
+                              daysOfWeek: [],
+                              departures: [],
+                              returnDepartures: [],
+                            }),
+                            [tf.key]: raw === '' ? undefined : Number(raw),
+                          },
+                        }));
+                        if (errors.timing?.[tf.key])
+                          setErrors((p) => ({
+                            ...p,
+                            timing: { ...p.timing, [tf.key]: undefined },
+                          }));
+                      }}
+                    />
+                    <p className="text-[11px] text-gray-500 mt-1">{tf.hint}</p>
+                    {errors.timing?.[tf.key] && (
+                      <p className="text-[11px] text-red-600 mt-1">
+                        {errors.timing[tf.key]}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="mt-3">
@@ -889,14 +1083,19 @@ function RouteFormModal({
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="time"
-                      className="input col-span-4"
-                      value={d.time}
-                      onChange={(e) =>
-                        updateDeparture(i, { time: e.target.value })
-                      }
-                    />
+                    <div className="col-span-4 flex items-center gap-1.5">
+                      <input
+                        type="time"
+                        className="input flex-1 min-w-0"
+                        value={d.time}
+                        onChange={(e) =>
+                          updateDeparture(i, { time: e.target.value })
+                        }
+                      />
+                      <span className="text-[11px] text-gray-500 shrink-0">
+                        IST
+                      </span>
+                    </div>
                     <button
                       className="col-span-1 text-red-600"
                       onClick={() => removeDeparture(i)}
@@ -946,14 +1145,19 @@ function RouteFormModal({
                         </option>
                       ))}
                     </select>
-                    <input
-                      type="time"
-                      className="input col-span-4"
-                      value={d.time}
-                      onChange={(e) =>
-                        updateReturnDeparture(i, { time: e.target.value })
-                      }
-                    />
+                    <div className="col-span-4 flex items-center gap-1.5">
+                      <input
+                        type="time"
+                        className="input flex-1 min-w-0"
+                        value={d.time}
+                        onChange={(e) =>
+                          updateReturnDeparture(i, { time: e.target.value })
+                        }
+                      />
+                      <span className="text-[11px] text-gray-500 shrink-0">
+                        IST
+                      </span>
+                    </div>
                     <button
                       className="col-span-1 text-red-600"
                       onClick={() => removeReturnDeparture(i)}

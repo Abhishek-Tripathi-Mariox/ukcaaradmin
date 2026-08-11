@@ -7,7 +7,8 @@ import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, LoadingSpinner, RefreshButton } from '@/components/common';
 
 const QUERY_KEY = 'admin-recharge-offers';
-const GST_RATE = 0.18;
+// Mirrors the backend's WALLET_GST_RATE — GST removed from recharges.
+const GST_RATE = 0;
 
 /** Mirror of the backend computeRechargeQuote — kept in sync for the preview. */
 function computeQuote(amount: number, bonusAmount = 0, discountPercent = 0) {
@@ -288,7 +289,7 @@ function EditModal({ initial, onClose, onSave }: EditModalProps) {
         {/* Live preview of what the customer sees */}
         <div className="rounded-lg border border-dashed border-teal-300 bg-teal-50/50 p-3 text-sm">
           <div className="flex justify-between py-0.5">
-            <span className="text-gray-600">Customer pays (incl. 18% GST)</span>
+            <span className="text-gray-600">Customer pays</span>
             <span className="font-semibold text-gray-900">₹{q.total.toLocaleString()}</span>
           </div>
           {q.discount > 0 && (

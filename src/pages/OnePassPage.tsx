@@ -186,7 +186,7 @@ export default function OnePassPage() {
               'font-medium',
               daysRemaining <= 7 ? 'text-red-600' : daysRemaining <= 30 ? 'text-yellow-600' : 'text-green-600'
             )}>
-              {daysRemaining} days left
+              {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left
             </div>
             <div className="text-sm text-gray-500">
               {format(new Date(expiry), 'MMM d, yyyy')}
@@ -264,13 +264,30 @@ export default function OnePassPage() {
       <div className="bg-white rounded-xl shadow-sm p-5 mb-8">
         <div className="flex items-center justify-between mb-1">
           <h3 className="text-lg font-semibold">Subscription Plans</h3>
-          <button
-            className="btn btn-primary btn-sm"
-            disabled={!planRows || savePlansMut.isPending}
-            onClick={() => planRows && savePlansMut.mutate(planRows)}
-          >
-            {savePlansMut.isPending ? 'Saving…' : 'Save Plans'}
-          </button>
+          <div className="flex items-center gap-2">
+            {/* The editor could only EDIT existing rows, so an admin whose
+                saved plans predate the 'daily' default had no way to add one. */}
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!planRows}
+              onClick={() =>
+                planRows &&
+                setPlanRows([
+                  ...planRows,
+                  { key: '', label: '', price: 0, days: 1, active: true },
+                ])
+              }
+            >
+              Add Plan
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              disabled={!planRows || savePlansMut.isPending}
+              onClick={() => planRows && savePlansMut.mutate(planRows)}
+            >
+              {savePlansMut.isPending ? 'Saving…' : 'Save Plans'}
+            </button>
+          </div>
         </div>
         <p className="text-sm text-gray-500 mb-4">
           These are the exact plans and prices the driver app offers. The price is charged
