@@ -180,13 +180,26 @@ export default function OnePassPage() {
         if (daysRemaining === null) {
           return <span className="text-sm text-gray-400">—</span>;
         }
+        // An elapsed pass has a NEGATIVE difference; rendering it raw read as
+        // "-4 days left". Past expiry we count days elapsed instead.
+        const elapsed = daysRemaining < 0;
+        const magnitude = Math.abs(daysRemaining);
+        const unit = magnitude === 1 ? 'day' : 'days';
         return (
           <div>
             <div className={clsx(
               'font-medium',
-              daysRemaining <= 7 ? 'text-red-600' : daysRemaining <= 30 ? 'text-yellow-600' : 'text-green-600'
+              elapsed || daysRemaining <= 7
+                ? 'text-red-600'
+                : daysRemaining <= 30
+                  ? 'text-yellow-600'
+                  : 'text-green-600'
             )}>
-              {daysRemaining} {daysRemaining === 1 ? 'day' : 'days'} left
+              {elapsed
+                ? magnitude === 0
+                  ? 'Expired today'
+                  : `Expired ${magnitude} ${unit} ago`
+                : `${daysRemaining} ${unit} left`}
             </div>
             <div className="text-sm text-gray-500">
               {format(new Date(expiry), 'MMM d, yyyy')}
