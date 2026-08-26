@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationTemplatesAPI } from '@/services/api';
 import { Modal, ConfirmModal } from '@/components/Modal';
-import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
+import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton, FeatureGuide } from '@/components/common';
 import { UserSearchSelect, type AdminUserLite } from '@/components/UserSearchSelect';
+import { notificationTemplateGuide } from '@/content/guides';
 import { Plus, Pencil, Trash2, Send, Eye, MailPlus, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { format } from 'date-fns';
@@ -81,6 +82,12 @@ export default function NotificationTemplatesPage() {
         title="Notification Templates"
         subtitle="Authorable push + in-app messages with variables and locale variants"
         actions={<RefreshButton onRefresh={refetch} isFetching={isFetching} />}
+      />
+
+      <FeatureGuide
+        storageKey="notification-templates"
+        title="How notification templates work"
+        sections={notificationTemplateGuide}
       />
 
       {/* Live registry: the keys the backend consults on real notifications.

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import clsx from 'clsx';
-import { RefreshCw } from 'lucide-react';
+import { ChevronDown, HelpCircle, RefreshCw } from 'lucide-react';
 
 type BadgeVariant = 'success' | 'warning' | 'danger' | 'info' | 'neutral';
 
@@ -204,6 +204,127 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       <h3 className="text-lg font-medium text-gray-900 mb-1">{title}</h3>
       <p className="text-gray-500 mb-4">{description}</p>
       {action}
+    </div>
+  );
+}
+
+// ── FeatureGuide ────────────────────────────────────────────────────────────
+// Collapsible "what does this page actually do" panel. Admins were reading
+// these screens without a reference for what each field means or what the
+// rider/driver sees as a result, so each guide pairs the admin-side controls
+// with their user-side effect. Collapsed state persists per key.
+
+export interface GuideSection {
+  heading: string;
+  body?: string;
+  bullets?: string[];
+  /** Field reference: [term, meaning, example]. */
+  table?: { head: string[]; rows: string[][] };
+}
+
+interface FeatureGuideProps {
+  /** Stable id — also the localStorage key for the collapsed state. */
+  storageKey: string;
+  title: string;
+  sections: GuideSection[];
+}
+
+export function FeatureGuide({ storageKey, title, sections }: FeatureGuideProps) {
+  const lsKey = `ukcaar.admin.guide.${storageKey}`;
+  const [open, setOpen] = useState<boolean>(() => {
+    try {
+      // Default open: an admin who has never seen the page needs it most.
+      return localStorage.getItem(lsKey) !== 'closed';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggle = () => {
+    setOpen((v) => {
+      const next = !v;
+      try {
+        localStorage.setItem(lsKey, next ? 'open' : 'closed');
+      } catch {
+        /* private mode / storage disabled — state is per-session only */
+      }
+      return next;
+    });
+  };
+
+  return (
+    <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50/60">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex items-center gap-2 text-sm font-semibold text-blue-900">
+          <HelpCircle className="h-4 w-4 shrink-0" />
+          {title}
+        </span>
+        <ChevronDown
+          className={clsx(
+            'h-4 w-4 shrink-0 text-blue-700 transition-transform',
+            open && 'rotate-180',
+          )}
+        />
+      </button>
+
+      {open && (
+        <div className="space-y-4 border-t border-blue-200 px-4 py-4">
+          {sections.map((s) => (
+            <div key={s.heading}>
+              <h4 className="text-xs font-bold uppercase tracking-wide text-blue-900">
+                {s.heading}
+              </h4>
+              {s.body && (
+                <p className="mt-1 text-sm leading-relaxed text-gray-700">{s.body}</p>
+              )}
+              {s.bullets && (
+                <ul className="mt-1 list-disc space-y-1 pl-5 text-sm text-gray-700">
+                  {s.bullets.map((b, i) => (
+                    <li key={i}>{b}</li>
+                  ))}
+                </ul>
+              )}
+              {s.table && (
+                <div className="mt-2 overflow-x-auto rounded-lg border border-blue-200 bg-white">
+                  <table className="w-full text-left text-sm">
+                    <thead className="bg-blue-100/70 text-xs uppercase tracking-wide text-blue-900">
+                      <tr>
+                        {s.table.head.map((h) => (
+                          <th key={h} className="px-3 py-2 font-semibold">
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-blue-100">
+                      {s.table.rows.map((r, i) => (
+                        <tr key={i} className="align-top">
+                          {r.map((c, j) => (
+                            <td
+                              key={j}
+                              className={clsx(
+                                'px-3 py-2 text-gray-700',
+                                j === 0 && 'whitespace-nowrap font-mono text-xs text-gray-900',
+                              )}
+                            >
+                              {c}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

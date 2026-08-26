@@ -13,6 +13,7 @@ import {
   Search,
 } from 'lucide-react';
 import { loyaltyAPI } from '@/services/api';
+import { loyaltyGuide } from '@/content/guides';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import {
   PageHeader,
@@ -20,6 +21,7 @@ import {
   LoadingSpinner,
   EmptyState,
   RefreshButton,
+  FeatureGuide,
 } from '@/components/common';
 
 type Tab = 'overview' | 'tiers' | 'rewards' | 'accounts' | 'redemptions';
@@ -42,6 +44,12 @@ export default function LoyaltyPage() {
         title="Customer loyalty"
         subtitle="Tiers, rewards, points balances and redemptions"
         actions={<RefreshButton onRefresh={handleRefresh} />}
+      />
+
+      <FeatureGuide
+        storageKey="loyalty"
+        title="How tiers and points are calculated"
+        sections={loyaltyGuide}
       />
 
       <div className="flex gap-2 border-b border-gray-200 overflow-x-auto">

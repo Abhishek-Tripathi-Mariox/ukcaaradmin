@@ -6,7 +6,8 @@ import { Download, FileText, Plus, X } from 'lucide-react';
 import { financeAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal } from '@/components/Modal';
-import { PageHeader, StatusBadge, RefreshButton } from '@/components/common';
+import { PageHeader, StatusBadge, RefreshButton, FeatureGuide } from '@/components/common';
+import { invoiceGuide } from '@/content/guides';
 
 type InvoiceType = 'customer' | 'driver_payout' | 'tds_certificate';
 type InvoiceStatus = 'draft' | 'issued' | 'cancelled' | 'sent';
@@ -230,6 +231,12 @@ export default function InvoicesPage() {
             </button>
           </div>
         }
+      />
+
+      <FeatureGuide
+        storageKey="invoices"
+        title="How GST invoicing works"
+        sections={invoiceGuide}
       />
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex flex-wrap gap-3 items-end">

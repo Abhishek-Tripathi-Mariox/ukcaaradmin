@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { notificationsAPI, usersAPI } from '@/services/api';
-import { PageHeader, RefreshButton, LoadingSpinner } from '@/components/common';
+import { PageHeader, RefreshButton, LoadingSpinner, FeatureGuide } from '@/components/common';
 import { Pagination } from '@/components/DataTable';
+import { adminAlertsGuide } from '@/content/guides';
 import { Bell, Send, Users, Car, Globe, History, Search, Check, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import clsx from 'clsx';
@@ -122,6 +123,12 @@ export default function NotificationsPage() {
         title="Notifications"
         subtitle="Send push notifications to users"
         actions={<RefreshButton onRefresh={() => sentQuery.refetch()} isFetching={sentQuery.isFetching} />}
+      />
+
+      <FeatureGuide
+        storageKey="admin-alerts"
+        title="Admin alerts vs. sending notifications"
+        sections={adminAlertsGuide}
       />
 
       {/* Tabs */}
