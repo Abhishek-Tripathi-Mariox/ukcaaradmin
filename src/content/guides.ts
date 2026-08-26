@@ -10,30 +10,41 @@ import type { GuideSection } from '@/components/common';
 
 export const invoiceGuide: GuideSection[] = [
   {
-    heading: 'What this page holds',
+    heading: 'Invoices are created by hand, not automatically',
     body:
-      'A GST tax invoice is generated automatically for each completed ride. This page is the record — you do not create invoices by hand. Wallet recharges are deliberately excluded: GST was removed from recharges, so only rides are taxed.',
+      'Nothing generates an invoice when a ride completes. An admin raises each one here with "New invoice" against a specific ride. That is why this list can be empty even after hundreds of completed rides — it is the expected behaviour today, not a fault.',
   },
   {
-    heading: 'How the tax is worked out',
+    heading: 'The two kinds',
+    bullets: [
+      'Customer invoice — the GST document for a ride, raised against a ride ID.',
+      'Driver payout statement — a TDS-applied statement for a driver, raised against a driver and optionally a ride.',
+      'Both start as a draft and only become a legal document once you press Issue.',
+    ],
+  },
+  {
+    heading: 'GST is currently switched off',
     body:
-      'Fares are GST-inclusive, so the tax is extracted from the fare rather than added on top. A ₹525 fare is treated as ₹500 of service plus ₹25 of GST — the customer is never charged more than the fare they were quoted.',
+      'The GST rate is set to zero, so invoices raised now show the full amount as taxable value with a zero tax line. Fares are unaffected either way — GST was only ever extracted from a fare that already included it, never added on top, so nothing a customer pays changes when it is switched on or off.',
+  },
+  {
+    heading: 'If it is switched back on',
     bullets: [
       'Taxable value = fare ÷ 1.05, then tax = fare − taxable value.',
       'Same state as the company: split into CGST 2.5% + SGST 2.5%.',
       'Different state: a single IGST line at 5% instead.',
-      'Rates come from the server environment (INVOICE_GST_RATE and friends), not from this screen.',
+      'Rates live in the server environment (INVOICE_GST_RATE and friends), not on this screen — ask a developer to change them.',
     ],
   },
   {
     heading: 'B2C vs B2B',
     body:
-      'If the customer has supplied their own GSTIN, it is printed as the receiver GSTIN and the invoice serves as their input-credit document. With no GSTIN it is an ordinary consumer invoice. The company GSTIN shown on every invoice comes from INVOICE_ISSUER_GSTIN.',
+      'If the customer has supplied their own GSTIN, it is printed as the receiver GSTIN and the invoice serves as their input-credit document. With no GSTIN it is an ordinary consumer invoice. The company GSTIN shown on every invoice comes from the server configuration.',
   },
   {
-    heading: 'What the customer sees',
+    heading: 'What the customer sees — nothing, yet',
     body:
-      'The invoice is attached to the completed ride in their app and can be downloaded as a PDF from the ride detail screen. Nothing is emailed unless transactional email has been configured on the server.',
+      'The rider app has no invoice screen and never requests one, so an invoice raised here is visible only to admins. To get it to a customer, download the PDF from this page and send it on. Wallet recharges carry no GST at all, so they are correctly absent from this list.',
   },
 ];
 
