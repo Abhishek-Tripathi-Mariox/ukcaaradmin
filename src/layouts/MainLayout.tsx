@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
@@ -180,6 +180,28 @@ export default function MainLayout() {
   });
   const alertTotal = alerts?.total ?? 0;
 
+  /**
+   * Per-nav-item alert counts, keyed by href.
+   *
+   * Every alert group's `target` is a page an admin has to visit to clear the
+   * work ("/rides?tab=disputes"), so stripping the query gives the nav href it
+   * belongs to. The bell answers "how many things need me"; this answers
+   * "which page are they on", which is the part that leads to action.
+   *
+   * Groups can share a destination — pending applications and re-uploaded
+   * documents both land on /drivers — so counts are summed. The drawer still
+   * breaks them down.
+   */
+  const alertCountsByHref = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const g of alerts?.groups ?? []) {
+      if (!g.count) continue;
+      const href = g.target.split('?')[0];
+      counts[href] = (counts[href] ?? 0) + g.count;
+    }
+    return counts;
+  }, [alerts]);
+
   const openAlertTarget = (target: string) => {
     setAlertsOpen(false);
     navigate(target);
@@ -279,7 +301,19 @@ export default function MainLayout() {
                         onClick={() => setSidebarOpen(false)}
                       >
                         <item.icon className="w-5 h-5" />
-                        {item.name}
+                        <span className="flex-1">{item.name}</span>
+                        {alertCountsByHref[item.href] > 0 && (
+                          <span
+                            className="ml-auto flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-red-100 text-red-700 text-xs font-semibold"
+                            title={`${alertCountsByHref[item.href]} item${
+                              alertCountsByHref[item.href] === 1 ? '' : 's'
+                            } need attention`}
+                          >
+                            {alertCountsByHref[item.href] > 99
+                              ? '99+'
+                              : alertCountsByHref[item.href]}
+                          </span>
+                        )}
                       </NavLink>
                     ))}
                   </div>
