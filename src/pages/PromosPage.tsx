@@ -190,8 +190,10 @@ export default function PromosPage() {
       header: 'Code',
       render: (promo: PromoCode) => (
         <div className="flex items-center gap-2">
-          <Tag className="w-4 h-4 text-primary-500" />
-          <span className="font-mono font-medium">{promo.code}</span>
+          <Tag className="w-4 h-4 text-primary-500 shrink-0" />
+          {/* min-w-0: a flex item won't shrink below its longest token, so an
+              over-long code spilled out of the clamped cell instead of wrapping. */}
+          <span className="font-mono font-medium min-w-0 break-words">{promo.code}</span>
         </div>
       ),
     },
@@ -316,7 +318,7 @@ export default function PromosPage() {
         title="Promo Codes"
         subtitle="Create and manage promotional codes"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <RefreshButton onRefresh={refetch} isFetching={isFetching} />
             <button
               onClick={() => {
@@ -391,12 +393,15 @@ export default function PromosPage() {
       >
         {selectedPromo && (
           <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center">
+            {/* min-w-0 + break-words let a long code/description wrap instead of
+                pushing the status badge out of the modal; shrink-0 stops the
+                icon tile being squeezed into a narrow strip to make room. */}
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-12 h-12 bg-primary-100 rounded-lg flex items-center justify-center shrink-0">
                   <Tag className="w-6 h-6 text-primary-600" />
                 </div>
-                <div>
+                <div className="min-w-0 break-words">
                   <div className="text-lg font-mono font-semibold">{selectedPromo.code}</div>
                   <div className="text-sm text-gray-500">{selectedPromo.description || 'No description'}</div>
                 </div>
@@ -494,18 +499,20 @@ export default function PromosPage() {
                 <div className="text-sm text-gray-500">No redemptions yet.</div>
               ) : (
                 <div className="space-y-2">
+                  {/* min-w-0 + break-words: a long customer name wraps instead of
+                      squeezing the amount/date column (shrink-0) or pushing it off. */}
                   {usage.recent.map((r) => (
                     <div
                       key={r._id}
-                      className="flex items-center justify-between text-sm border-b border-gray-100 pb-2"
+                      className="flex items-center justify-between gap-4 text-sm border-b border-gray-100 pb-2"
                     >
-                      <div>
+                      <div className="min-w-0 break-words">
                         <div className="font-medium">
                           {r.customer?.firstName} {r.customer?.lastName}
                         </div>
                         <div className="text-gray-500">{r.customer?.phone}</div>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <div className="font-medium text-green-600">-₹{r.discount?.toFixed(2)}</div>
                         <div className="text-gray-400">
                           {format(new Date(r.createdAt), 'MMM d, yyyy HH:mm')}

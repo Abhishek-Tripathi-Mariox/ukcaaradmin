@@ -58,6 +58,17 @@ export default function OnePassPage() {
   });
   const setPlanField = (i: number, field: keyof PlanRow, value: any) =>
     setPlanRows((rows) => rows?.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) ?? rows);
+  // The grant modal's plan picker mirrors these rows — not a hardcoded
+  // weekly/monthly/yearly list that had drifted from the plans actually sold.
+  const defaultGrant = () => {
+    const first = planRows?.find((p) => p.active) ?? planRows?.[0];
+    return {
+      driverId: '',
+      plan: first?.key ?? 'monthly',
+      duration: first?.days ?? 30,
+      reason: '',
+    };
+  };
 
   const { data: stats } = useQuery({
     queryKey: ['onepass', 'stats'],
@@ -112,7 +123,7 @@ export default function OnePassPage() {
       queryClient.invalidateQueries({ queryKey: ['onepass'] });
       toast.success('Subscription granted');
       setShowGrantModal(false);
-      setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+      setGrantData(defaultGrant());
       setGrantUser(null);
     },
     onError: () => toast.error('Failed to grant subscription'),
@@ -138,7 +149,10 @@ export default function OnePassPage() {
               <Crown className="w-5 h-5 text-purple-600" />
             </div>
           </div>
-          <div>
+          {/* min-w-0: without it this text can't shrink below one long email,
+              which then spills over the next column instead of wrapping
+              inside DataTable's cell-clamp. */}
+          <div className="min-w-0">
             <div className="font-medium text-gray-900">
               {driver.firstName} {driver.lastName}
             </div>
@@ -156,7 +170,7 @@ export default function OnePassPage() {
         return (
           <div className="flex items-center gap-2">
             <Car className="w-4 h-4 text-gray-400" />
-            <span className="capitalize">{vehicle}</span>
+            <span className="capitalize min-w-0">{vehicle}</span>
           </div>
         );
       },
@@ -260,10 +274,13 @@ export default function OnePassPage() {
         title="OnePass Management"
         subtitle="Manage driver subscription plans"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <RefreshButton onRefresh={refetch} isFetching={isFetching} />
             <button
-              onClick={() => setShowGrantModal(true)}
+              onClick={() => {
+                setGrantData(defaultGrant());
+                setShowGrantModal(true);
+              }}
               className="btn btn-primary"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -275,7 +292,7 @@ export default function OnePassPage() {
 
       {/* Plan configuration — price + duration the driver app shows. */}
       <div className="bg-white rounded-xl shadow-sm p-5 mb-8">
-        <div className="flex items-center justify-between mb-1">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
           <h3 className="text-lg font-semibold">Subscription Plans</h3>
           <div className="flex items-center gap-2">
             {/* The editor could only EDIT existing rows, so an admin whose
@@ -441,10 +458,10 @@ export default function OnePassPage() {
       >
         <div className="space-y-4">
           <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
-            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
+            <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
               <Crown className="w-5 h-5 text-purple-600" />
             </div>
-            <div>
+            <div className="min-w-0 break-words">
               <div className="font-medium">
                 {selectedDriver?.firstName} {selectedDriver?.lastName}
               </div>
@@ -497,7 +514,7 @@ export default function OnePassPage() {
         title="Cancel Subscription"
       >
         <div className="space-y-4">
-          <p className="text-gray-600">
+          <p className="text-gray-600 break-words">
             Are you sure you want to cancel the OnePass subscription for {selectedDriver?.firstName} {selectedDriver?.lastName}?
           </p>
           <div>
@@ -536,7 +553,7 @@ export default function OnePassPage() {
         isOpen={showGrantModal}
         onClose={() => {
           setShowGrantModal(false);
-          setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+          setGrantData(defaultGrant());
           setGrantUser(null);
         }}
         title="Grant OnePass Subscription"
@@ -559,12 +576,25 @@ export default function OnePassPage() {
             </label>
             <select
               value={grantData.plan}
-              onChange={(e) => setGrantData({ ...grantData, plan: e.target.value })}
+              onChange={(e) => {
+                // Take the plan's own duration so the grant matches what the
+                // driver app sells; the days field below stays editable.
+                const row = planRows?.find((p) => p.key === e.target.value);
+                setGrantData({
+                  ...grantData,
+                  plan: e.target.value,
+                  duration: row?.days ?? grantData.duration,
+                });
+              }}
               className="input"
+              disabled={!planRows}
             >
-              <option value="weekly">Weekly</option>
-              <option value="monthly">Monthly</option>
-              <option value="yearly">Yearly</option>
+              {(planRows ?? []).map((p) => (
+                <option key={p.key} value={p.key} disabled={!p.active}>
+                  {p.label} · {p.days} days · ₹{p.price}
+                  {p.active ? '' : ' (inactive)'}
+                </option>
+              ))}
             </select>
           </div>
           <div>
@@ -597,7 +627,7 @@ export default function OnePassPage() {
               onClick={() => {
                 setShowGrantModal(false);
                 setGrantUser(null);
-                setGrantData({ driverId: '', plan: 'monthly', duration: 30, reason: '' });
+                setGrantData(defaultGrant());
               }}
               className="btn btn-secondary"
             >

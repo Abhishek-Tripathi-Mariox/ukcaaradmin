@@ -24,6 +24,7 @@ interface VehicleFareConfig {
 interface FareSettings {
   baseFares: Record<string, VehicleFareConfig>;
   commission: number;        // platform commission fraction (0–1)
+  onePassCommission?: number; // commission fraction for OnePass drivers (0–1)
   cancellationFee: number;
   minFare: number;
 }
@@ -346,6 +347,7 @@ export default function FareCalculationPage() {
   // inputs and included in the save payload (this is what was previously
   // read-only and silently dropped on save).
   const [commissionPct, setCommissionPct] = useState<number | null>(null);
+  const [onePassPct, setOnePassPct] = useState<number | null>(null);
   const [cancellationFee, setCancellationFee] = useState<number | null>(null);
 
   // Sync remote → local whenever fareData arrives (and local hasn't been touched yet).
@@ -354,6 +356,8 @@ export default function FareCalculationPage() {
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const effectiveCommissionPct =
     commissionPct ?? round2((fareData?.commission ?? 0.2) * 100);
+  const effectiveOnePassPct =
+    onePassPct ?? round2((fareData?.onePassCommission ?? 0) * 100);
   const effectiveCancellationFee = cancellationFee ?? (fareData?.cancellationFee ?? 50);
 
   function buildInitialConfig(
@@ -389,6 +393,7 @@ export default function FareCalculationPage() {
         // Commission is sent as a percentage; the backend stores it as a
         // fraction. Cancellation fee is a flat ₹ amount.
         commission: effectiveCommissionPct,
+        onePassCommission: effectiveOnePassPct,
         cancellationFee: effectiveCancellationFee,
       }),
     onSuccess: () => {
@@ -396,6 +401,8 @@ export default function FareCalculationPage() {
       queryClient.invalidateQueries({ queryKey: ['fare-settings'] });
       setLocalConfig(null);
       setCommissionPct(null);
+    setOnePassPct(null);
+      setOnePassPct(null);
       setCancellationFee(null);
     },
     onError: () => toast.error('Failed to save fare configuration'),
@@ -501,6 +508,22 @@ export default function FareCalculationPage() {
                   />
                   <p className="text-xs text-gray-400 mt-1">
                     Platform's cut of each fare. Applies on the next ride after saving.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-500 block mb-1">
+                    OnePass Commission (%)
+                  </label>
+                  <NumInput
+                    min={0}
+                    max={100}
+                    step={1}
+                    value={effectiveOnePassPct}
+                    onChange={setOnePassPct}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Cut taken from drivers with an active OnePass. 0 means OnePass drivers keep the full fare.
                   </p>
                 </div>
                 <div>

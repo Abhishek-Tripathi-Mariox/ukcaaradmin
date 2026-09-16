@@ -59,8 +59,41 @@ body {
 }
 
 /* Table styles */
+/* overflow-x-auto, NOT overflow-hidden. This rule sits after @tailwind
+   utilities and outside any @layer, so its overflow beat the
+   `overflow-x-auto` utility DataTable adds (same specificity, later wins).
+   Every wide table was clipped with no scrollbar — the action buttons in the
+   right-hand column were simply unreachable on laptop-width screens.
+   Any non-visible overflow still clips the rounded corners. */
 .table-container {
-  @apply bg-white rounded-lg shadow overflow-hidden;
+  @apply bg-white rounded-lg shadow overflow-x-auto;
+}
+
+/* Sticky actions column: pin a table's action column to the right edge of
+   its scrolling container so the buttons stay visible however wide the
+   table grows. Opaque background so scrolled content passes underneath. */
+.table-sticky-actions {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background-color: #ffffff;
+  white-space: nowrap;
+  box-shadow: -8px 0 8px -8px rgba(15, 23, 42, 0.18);
+}
+thead .table-sticky-actions {
+  background-color: rgb(249 250 251); /* gray-50, matches .table-header */
+}
+tr:hover > .table-sticky-actions {
+  background-color: rgb(249 250 251); /* follow .table-row's hover tint */
+}
+
+/* Cell content clamp: caps how wide any one column can grow and wraps an
+   over-long unbroken token (IDs, emails, URLs, junk test data) inside that
+   cap. break-word, not anywhere: short tokens like dates and phone numbers
+   keep their natural width and never split mid-token. */
+.cell-clamp {
+  max-width: 28rem;
+  overflow-wrap: break-word;
 }
 
 .table-header {
@@ -148,6 +181,15 @@ body {
 
 .modal-content {
   @apply bg-white rounded-xl shadow-xl max-h-[90vh] overflow-y-auto;
+}
+
+/* Layout blowout guard: if any page's content still manages to exceed the
+   viewport (grid/flex items default to min-width:auto, so one unwrappable
+   line can do it), the main area scrolls horizontally instead of silently
+   pushing that page's action buttons off-screen. Pages that fit are
+   unaffected — no scrollbar appears. */
+main {
+  overflow-x: auto;
 }
 
 /* Loading skeleton */

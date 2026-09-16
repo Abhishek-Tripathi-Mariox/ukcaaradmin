@@ -257,7 +257,10 @@ export default function RoutesPage() {
           {routes.map((r: any) => (
             <div
               key={r._id}
-              className="bg-white border rounded-lg p-4 flex items-start justify-between gap-4"
+              // min-w-0: grid items default to min-width:auto, so one long
+              // stops line blew the whole column wider than the viewport and
+              // pushed the action buttons off-screen on laptop displays.
+              className="min-w-0 bg-white border rounded-lg p-4 flex items-start justify-between gap-4"
             >
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
@@ -1234,10 +1237,12 @@ function ManageRouteModal({
     queryFn: async () => (await routesAPI.get(route._id)).data?.data?.route,
   });
 
+  // Only scheduled-service drivers can run a shuttle route — instant/private
+  // drivers used to show up in this picker and could be attached by mistake.
   const { data: driverSearchData, isFetching: driverSearchLoading } = useQuery({
     queryKey: ['route-driver-search', route._id, driverSearchDebounced],
     queryFn: async () =>
-      (await driversAPI.getAll({ search: driverSearchDebounced, limit: 10 })).data?.data,
+      (await driversAPI.getAll({ search: driverSearchDebounced, limit: 10, serviceType: 'scheduled' })).data?.data,
     enabled: tab === 'drivers' && driverSearchDebounced.length > 0,
     placeholderData: keepPreviousData,
   });

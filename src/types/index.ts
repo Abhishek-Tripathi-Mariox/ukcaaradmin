@@ -68,6 +68,9 @@ export interface DriverDocument {
 
 export interface Driver extends User {
   driverProfile: DriverProfile;
+  /** Scheduled-service drivers: their shuttle-route registration (approved,
+   *  else the pending request). Attached by the admin driver endpoints. */
+  routeRegistration?: { routeId: string; routeName: string; status: string };
 }
 
 // Ride types

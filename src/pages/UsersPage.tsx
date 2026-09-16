@@ -48,7 +48,7 @@ function Avatar({
         src={user.avatar}
         alt={initials}
         onError={() => setErrored(true)}
-        className="rounded-full object-cover bg-gray-100"
+        className="rounded-full object-cover bg-gray-100 shrink-0"
         style={{ width: size, height: size }}
       />
     );
@@ -56,7 +56,7 @@ function Avatar({
 
   return (
     <div
-      className="rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-medium"
+      className="rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-medium shrink-0"
       style={{ width: size, height: size, fontSize: size * 0.4 }}
     >
       {initials}
@@ -292,7 +292,7 @@ export default function UsersPage() {
         title={selectedUser?.isActive ? 'Deactivate User' : 'Activate User'}
       >
         <div className="space-y-4">
-          <p className="text-gray-600">
+          <p className="text-gray-600 break-words">
             {selectedUser?.isActive
               ? `Are you sure you want to deactivate ${displayName(selectedUser ?? {})}'s account?`
               : `Are you sure you want to activate ${displayName(selectedUser ?? {})}'s account?`}
@@ -412,7 +412,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
         <Avatar user={u} size={72} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-lg font-semibold">{displayName(u)}</h3>
+            <h3 className="text-lg font-semibold min-w-0 break-words">{displayName(u)}</h3>
             <StatusBadge status={u.isActive ? 'active' : 'inactive'} />
             {u.isVerified && (
               <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
@@ -424,7 +424,9 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
             <span className="flex items-center gap-1">
               <Phone className="w-3.5 h-3.5" /> {u.phone || '—'}
             </span>
-            <span className="flex items-center gap-1">
+            {/* break-all: an email is one unbreakable token; this lets it wrap
+                inside the modal instead of widening it. */}
+            <span className="flex items-center gap-1 min-w-0 break-all">
               <Mail className="w-3.5 h-3.5" /> {u.email || '—'}
             </span>
             <span className="flex items-center gap-1">
@@ -526,7 +528,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
               <div key={f._id} className="text-sm">
                 <div className="flex items-center gap-2 flex-wrap">
                   <StarRow value={f.stars} size={12} />
-                  <span className="text-gray-700 font-medium">
+                  <span className="text-gray-700 font-medium min-w-0 break-words">
                     {f.driver
                       ? `${f.driver.firstName ?? ''} ${f.driver.lastName ?? ''}`.trim() ||
                         'Driver'
@@ -538,7 +540,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
                     </span>
                   )}
                 </div>
-                {f.comment && <div className="text-gray-600 mt-0.5">{f.comment}</div>}
+                {f.comment && <div className="text-gray-600 mt-0.5 break-words">{f.comment}</div>}
                 {f.tags?.length > 0 && (
                   <div className="flex flex-wrap gap-1 mt-1">
                     {f.tags.map((t: string, i: number) => (
@@ -559,7 +561,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
 
       {/* Bookings by status + monthly chart */}
       <div className="grid md:grid-cols-2 gap-3">
-        <div className="bg-white border rounded-lg p-3">
+        <div className="bg-white border rounded-lg p-3 overflow-x-auto">
           <div className="text-sm font-semibold mb-2">Bookings by status</div>
           {(s.ridesByStatus ?? []).length === 0 ? (
             <div className="text-xs text-gray-500">No bookings yet</div>
@@ -621,7 +623,10 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
       {/* Recent bookings */}
       <div>
         <div className="text-sm font-semibold mb-2">Recent bookings</div>
-        <div className="border rounded-lg overflow-hidden">
+        {/* overflow-x-auto, not overflow-hidden: still clips to the rounded
+            border, but a table wider than the modal scrolls instead of
+            silently cutting off its right-hand columns. */}
+        <div className="border rounded-lg overflow-x-auto">
           {rides.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-500">No bookings yet</div>
           ) : (
@@ -650,11 +655,13 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
                       </div>
                     </td>
                     <td className="px-2 py-2">
-                      {r.driver
-                        ? `${r.driver.firstName ?? ''} ${r.driver.lastName ?? ''}`.trim() ||
-                          r.driver.phone ||
-                          '—'
-                        : '—'}
+                      <div className="cell-clamp">
+                        {r.driver
+                          ? `${r.driver.firstName ?? ''} ${r.driver.lastName ?? ''}`.trim() ||
+                            r.driver.phone ||
+                            '—'
+                          : '—'}
+                      </div>
                     </td>
                     <td className="px-2 py-2">
                       <StatusBadge status={r.status} />
@@ -673,7 +680,7 @@ function UserDetailContent({ data, monthBars }: { data: any; monthBars: any[] })
       {/* Recent payments */}
       <div>
         <div className="text-sm font-semibold mb-2">Recent payments</div>
-        <div className="border rounded-lg overflow-hidden">
+        <div className="border rounded-lg overflow-x-auto">
           {payments.length === 0 ? (
             <div className="p-6 text-center text-sm text-gray-500">No payments yet</div>
           ) : (

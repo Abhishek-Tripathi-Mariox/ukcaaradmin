@@ -38,6 +38,22 @@ import clsx from 'clsx';
 import type { Driver, DriverDocument, Ride } from '@/types';
 
 type TabType = 'all' | 'applications' | 'online';
+// Human labels for driver document types (User.driverProfile.documents[].type).
+// Unlisted types fall back to the raw key with separators spaced out.
+const DOC_LABELS: Record<string, string> = {
+  licence: 'Driving licence',
+  aadhaar: 'Aadhaar',
+  'aadhaar-front': 'Aadhaar (front)',
+  'aadhaar-back': 'Aadhaar (back)',
+  'profile-photo': 'Profile photo',
+  vehicle: 'Vehicle RC',
+  'vehicle-photo': 'Vehicle photo',
+  insurance: 'Insurance certificate',
+  puc: 'Pollution certificate (PUC)',
+  dbs: 'DBS check',
+  phv: 'PHV licence',
+};
+
 type DetailTab = 'overview' | 'rides' | 'documents' | 'stats';
 
 const formatGBP = (n?: number) =>
@@ -257,8 +273,11 @@ export default function DriversPage() {
         const make = [v?.vehicleMake, v?.vehicleModel].filter(Boolean).join(' ');
         return (
           <div className="flex items-center gap-2">
-            <Car className="w-4 h-4 text-gray-400" />
-            <div>
+            <Car className="w-4 h-4 text-gray-400 shrink-0" />
+            {/* min-w-0: a flex item won't shrink below its longest token by
+                default, so one unbroken model/colour string overflowed the
+                clamped cell instead of wrapping inside it. */}
+            <div className="min-w-0 break-words">
               <div className="text-sm font-medium">{make || '—'}</div>
               <div className="text-xs text-gray-500">
                 {v?.plateNumber || 'No plate'} {v?.vehicleColor ? `• ${v.vehicleColor}` : ''}
@@ -271,7 +290,20 @@ export default function DriversPage() {
     {
       key: 'category',
       header: 'Category',
-      render: (d: Driver) => <ServiceTypeBadge serviceType={d.driverProfile?.serviceType} />,
+      render: (d: Driver) => (
+        <div className="min-w-0">
+          <ServiceTypeBadge serviceType={d.driverProfile?.serviceType} />
+          {d.routeRegistration && (
+            <div
+              className="text-xs text-gray-500 mt-0.5 truncate max-w-[180px]"
+              title={d.routeRegistration.routeName}
+            >
+              {d.routeRegistration.routeName}
+              {d.routeRegistration.status === 'pending' ? ' · requested' : ''}
+            </div>
+          )}
+        </div>
+      ),
     },
     {
       key: 'rating',
@@ -389,7 +421,7 @@ export default function DriversPage() {
         actions={<RefreshButton onRefresh={() => listQuery.refetch()} isFetching={listQuery.isFetching} />}
       />
 
-      <div className="flex gap-2 mb-6 border-b border-gray-200">
+      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
         {[
           { key: 'all', label: 'All Drivers', icon: Car },
           { key: 'applications', label: 'Applications', icon: FileText },
@@ -634,7 +666,11 @@ export default function DriversPage() {
           selectedDriver && approveMutation.mutate({ id: selectedDriver._id })
         }
         title="Approve Driver"
-        message={`Approve ${selectedDriver?.firstName ?? ''} ${selectedDriver?.lastName ?? ''}? They'll be able to go online and accept rides.`}
+        message={`Approve ${selectedDriver?.firstName ?? ''} ${selectedDriver?.lastName ?? ''}? They'll be able to go online and accept rides.${
+          selectedDriver?.routeRegistration?.status === 'pending'
+            ? ` Their requested route "${selectedDriver.routeRegistration.routeName}" will be approved along with the account.`
+            : ''
+        }`}
         confirmText="Approve"
         variant="info"
         isLoading={approveMutation.isPending}
@@ -867,7 +903,7 @@ function DriverDetailModal({
             <Avatar driver={driver} size={64} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-lg font-semibold">
+                <h3 className="text-lg font-semibold min-w-0 break-words">
                   {driver.firstName} {driver.lastName}
                 </h3>
                 <StatusBadge status={driverStatusLabel(driver)} />
@@ -889,7 +925,9 @@ function DriverDetailModal({
                   </span>
                 )}
                 {driver.email && (
-                  <span className="inline-flex items-center gap-1">
+                  // break-all, not break-words: the text is an anonymous flex
+                  // item, so only break-all lowers its min width enough to wrap.
+                  <span className="inline-flex items-center gap-1 min-w-0 break-all">
                     <Mail className="w-3 h-3" /> {driver.email}
                   </span>
                 )}
@@ -936,7 +974,7 @@ function DriverDetailModal({
             </div>
           </div>
 
-          <div className="flex gap-1 border-b mb-4">
+          <div className="flex flex-wrap gap-1 border-b mb-4">
             {(
               [
                 { key: 'overview', label: 'Overview' },
@@ -1001,6 +1039,21 @@ function DriverDetailModal({
                 updatedAt={(driver.driverProfile as any)?.locationUpdatedAt}
               />
 
+              {driver.driverProfile?.serviceType === 'scheduled' && (
+                <Section title="Scheduled route">
+                  <KV label="Route">
+                    {driver.routeRegistration?.routeName || 'Not requested yet'}
+                  </KV>
+                  <KV label="Request status">
+                    <span className="capitalize">{driver.routeRegistration?.status ?? '—'}</span>
+                  </KV>
+                  {driver.routeRegistration?.status === 'pending' && !driver.isVerified && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      Approving this driver also approves the route request.
+                    </p>
+                  )}
+                </Section>
+              )}
               <Section title="Vehicle">
                 <KV label="Make">{driver.driverProfile?.vehicleMake || '—'}</KV>
                 <KV label="Model">{driver.driverProfile?.vehicleModel || '—'}</KV>
@@ -1033,7 +1086,7 @@ function DriverDetailModal({
                   <div className="font-medium text-red-700 flex items-center gap-1">
                     <Ban className="w-4 h-4" /> Account disabled
                   </div>
-                  <div className="text-red-700 mt-1">{(driver as any).disabledReason}</div>
+                  <div className="text-red-700 mt-1 break-words">{(driver as any).disabledReason}</div>
                   {(driver as any).disabledAt && (
                     <div className="text-red-500 text-xs mt-1">
                       since {format(new Date((driver as any).disabledAt), 'PP p')}
@@ -1075,7 +1128,7 @@ function DriverDetailModal({
                   No rides found
                 </div>
               ) : (
-                <div className="border rounded-lg overflow-hidden">
+                <div className="border rounded-lg overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead className="bg-gray-50 text-xs uppercase text-gray-600">
                       <tr>
@@ -1094,20 +1147,27 @@ function DriverDetailModal({
                             {format(new Date(r.createdAt), 'PP p')}
                           </td>
                           <td className="px-3 py-2">
-                            {r.customer
-                              ? `${r.customer.firstName ?? ''} ${r.customer.lastName ?? ''}`.trim() ||
-                                r.customer.phone ||
-                                '—'
-                              : '—'}
+                            <div className="cell-clamp">
+                              {r.customer
+                                ? `${r.customer.firstName ?? ''} ${r.customer.lastName ?? ''}`.trim() ||
+                                  r.customer.phone ||
+                                  '—'
+                                : '—'}
+                            </div>
                           </td>
                           <td className="px-3 py-2 max-w-xs">
-                            <div className="text-xs text-gray-500 truncate">
-                              <MapPin className="w-3 h-3 inline mr-1 text-green-600" />
-                              {r.pickup?.address || '—'}
-                            </div>
-                            <div className="text-xs text-gray-500 truncate">
-                              <MapPin className="w-3 h-3 inline mr-1 text-red-600" />
-                              {r.dropoff?.address || '—'}
+                            {/* max-width on a <td> is ignored by table layout, so
+                                the nowrap addresses sized the column; cell-clamp
+                                caps it and lets the truncate ellipsis kick in. */}
+                            <div className="cell-clamp">
+                              <div className="text-xs text-gray-500 truncate">
+                                <MapPin className="w-3 h-3 inline mr-1 text-green-600" />
+                                {r.pickup?.address || '—'}
+                              </div>
+                              <div className="text-xs text-gray-500 truncate">
+                                <MapPin className="w-3 h-3 inline mr-1 text-red-600" />
+                                {r.dropoff?.address || '—'}
+                              </div>
                             </div>
                           </td>
                           <td className="px-3 py-2 text-right">
@@ -1145,11 +1205,11 @@ function DriverDetailModal({
                     key={doc.type}
                     className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
                       {docStatusIcon(doc.status)}
-                      <div className="min-w-0">
+                      <div className="min-w-0 break-words">
                         <div className="font-medium capitalize">
-                          {doc.type.replace(/_/g, ' ')}
+                          {DOC_LABELS[doc.type] ?? doc.type.replace(/[-_]/g, ' ')}
                         </div>
                         <div className="text-xs text-gray-500">
                           {doc.expiry
@@ -1245,7 +1305,7 @@ function DriverDetailModal({
                     <div className="text-sm font-semibold text-gray-700 mb-2">Bank details</div>
                     {hasBank ? (
                       <div className="p-3 bg-gray-50 rounded-lg">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm break-words">
                           <div>
                             <span className="text-gray-500">Account holder: </span>
                             {bank?.accountHolder || '—'}
@@ -1422,7 +1482,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function KV({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div>
+    <div className="min-w-0 break-words">
       <span className="text-xs text-gray-500">{label}: </span>
       <span className="text-gray-800">{children}</span>
     </div>

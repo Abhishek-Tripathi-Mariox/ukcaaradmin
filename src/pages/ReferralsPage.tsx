@@ -105,9 +105,9 @@ export default function ReferralsPage() {
       render: (r: any) => (
         <div className="flex items-center gap-3">
           {r.avatar ? (
-            <img src={r.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
+            <img src={r.avatar} alt="" className="w-9 h-9 shrink-0 rounded-full object-cover" />
           ) : (
-            <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-semibold">
+            <div className="w-9 h-9 shrink-0 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-semibold">
               {initials(r)}
             </div>
           )}
@@ -335,16 +335,19 @@ function ReferralDetailModal({ userId, onClose }: { userId: string; onClose: () 
               <img
                 src={data.referrer.avatar}
                 alt=""
-                className="w-12 h-12 rounded-full object-cover"
+                className="w-12 h-12 shrink-0 rounded-full object-cover"
               />
             ) : (
-              <div className="w-12 h-12 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold">
+              <div className="w-12 h-12 shrink-0 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-semibold">
                 {initials(data.referrer)}
               </div>
             )}
-            <div>
+            {/* min-w-0 + break-words: a long name/email wraps instead of
+                widening the modal. The name gets its own span so it is a
+                flex item that can shrink next to the role badge. */}
+            <div className="min-w-0 break-words">
               <div className="font-semibold flex items-center gap-2">
-                {fullName(data.referrer)} <RoleBadge role={data.referrer.role} />
+                <span className="min-w-0">{fullName(data.referrer)}</span> <RoleBadge role={data.referrer.role} />
               </div>
               <div className="text-sm text-gray-500">
                 {data.referrer.phone || data.referrer.email || '—'}
@@ -378,7 +381,9 @@ function ReferralDetailModal({ userId, onClose }: { userId: string; onClose: () 
           {/* Referred users */}
           <div>
             <div className="text-sm font-semibold mb-2">People referred</div>
-            <div className="border rounded-lg overflow-hidden">
+            {/* overflow-x-auto, not overflow-hidden: a wide table must scroll
+                here, not clip the Status column. Still clips the rounded corners. */}
+            <div className="border rounded-lg overflow-x-auto">
               {data.referred.length === 0 ? (
                 <div className="p-6 text-center text-sm text-gray-500">No one yet</div>
               ) : (
@@ -395,9 +400,11 @@ function ReferralDetailModal({ userId, onClose }: { userId: string; onClose: () 
                     {data.referred.map((u: any) => (
                       <tr key={u._id}>
                         <td className="px-3 py-2">
-                          <div className="font-medium">{fullName(u)}</div>
-                          <div className="text-xs text-gray-500">
-                            {u.phone || u.email || ''}
+                          <div className="cell-clamp">
+                            <div className="font-medium">{fullName(u)}</div>
+                            <div className="text-xs text-gray-500">
+                              {u.phone || u.email || ''}
+                            </div>
                           </div>
                         </td>
                         <td className="px-3 py-2">

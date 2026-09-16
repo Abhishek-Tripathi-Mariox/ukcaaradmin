@@ -13,6 +13,9 @@ const ZONE_KINDS = [
   { value: 'restricted', label: 'Restricted', color: '#7c3aed' },
   { value: 'airport', label: 'Airport', color: '#0ea5e9' },
   { value: 'city', label: 'City', color: '#10b981' },
+  // Draw one (or more) of these and instant/private rides must start and end
+  // inside them; with none drawn there is no service-area restriction.
+  { value: 'service_area', label: 'Service area', color: '#f59e0b' },
 ] as const;
 
 const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

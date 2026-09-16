@@ -640,7 +640,9 @@ export default function RidesPage() {
       {/* Filters — shared across every tab. The Live tab applies them
           client-side; the others pass them through to the API. */}
       <div className="mb-6 space-y-3">
-        <div className="flex flex-col lg:flex-row gap-3">
+        {/* flex-wrap: at lg beside the sidebar (~700px at a 1024px viewport)
+            search min-width + three fixed selects don't fit on one line. */}
+        <div className="flex flex-col lg:flex-row flex-wrap gap-3">
           {/* Search */}
           <div className="relative flex-1 min-w-[200px]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -833,8 +835,8 @@ export default function RidesPage() {
                 </div>
               </div>
               <div className="mt-3 pt-3 border-t border-current/20 flex items-center justify-between">
-                <span>{ride.customer?.firstName} {ride.customer?.lastName}</span>
-                <span className="font-medium">₹{(ride.actualFare ?? ride.estimatedFare ?? 0).toFixed(2)}</span>
+                <span className="min-w-0 break-words">{ride.customer?.firstName} {ride.customer?.lastName}</span>
+                <span className="font-medium shrink-0">₹{(ride.actualFare ?? ride.estimatedFare ?? 0).toFixed(2)}</span>
               </div>
             </div>
           ))}
@@ -910,12 +912,12 @@ export default function RidesPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-4">
+              <div className="space-y-4 min-w-0">
                 <h4 className="font-medium text-gray-900">Route</h4>
                 <div className="space-y-3">
                   <div className="flex items-start gap-3">
                     <div className="w-3 h-3 bg-green-500 rounded-full mt-1" />
-                    <div>
+                    <div className="min-w-0 break-words">
                       <div className="text-sm font-medium">Pickup</div>
                       <div className="text-sm text-gray-600">{selectedRide.pickup?.address}</div>
                     </div>
@@ -923,7 +925,7 @@ export default function RidesPage() {
                   {selectedRide.stops?.map((stop, idx) => (
                     <div key={idx} className="flex items-start gap-3">
                       <div className="w-3 h-3 bg-blue-500 rounded-full mt-1" />
-                      <div>
+                      <div className="min-w-0 break-words">
                         <div className="text-sm font-medium">Stop {idx + 1}</div>
                         <div className="text-sm text-gray-600">{stop.address}</div>
                       </div>
@@ -931,7 +933,7 @@ export default function RidesPage() {
                   ))}
                   <div className="flex items-start gap-3">
                     <div className="w-3 h-3 bg-red-500 rounded-full mt-1" />
-                    <div>
+                    <div className="min-w-0 break-words">
                       <div className="text-sm font-medium">Dropoff</div>
                       <div className="text-sm text-gray-600">{selectedRide.dropoff?.address}</div>
                     </div>
@@ -987,18 +989,18 @@ export default function RidesPage() {
             </div>
 
             <div className="grid grid-cols-2 gap-6">
-              <div>
+              <div className="min-w-0">
                 <h4 className="font-medium text-gray-900 mb-2">Customer</h4>
-                <div className="text-sm">
+                <div className="text-sm break-words">
                   <div>{selectedRide.customer?.firstName} {selectedRide.customer?.lastName}</div>
                   <div className="text-gray-500">{selectedRide.customer?.phone}</div>
                   <div className="text-gray-500">{selectedRide.customer?.email}</div>
                 </div>
               </div>
               {selectedRide.driver ? (
-                <div>
+                <div className="min-w-0">
                   <h4 className="font-medium text-gray-900 mb-2">Driver</h4>
-                  <div className="text-sm">
+                  <div className="text-sm break-words">
                     <div>{selectedRide.driver?.firstName} {selectedRide.driver?.lastName}</div>
                     <div className="text-gray-500">{selectedRide.driver?.phone}</div>
                     <div className="text-gray-500">{selectedRide.driver?.driverProfile?.plateNumber}</div>
@@ -1115,9 +1117,9 @@ export default function RidesPage() {
                   <AlertTriangle className="w-4 h-4" />
                   Dispute
                 </h4>
-                <p className="text-sm text-red-800">{selectedRide.dispute.reason || 'Flagged for review'}</p>
+                <p className="text-sm text-red-800 break-words">{selectedRide.dispute.reason || 'Flagged for review'}</p>
                 {selectedRide.dispute.resolution && (
-                  <p className="text-sm text-red-700 mt-2">
+                  <p className="text-sm text-red-700 mt-2 break-words">
                     <strong>Resolution:</strong> {selectedRide.dispute.resolution}
                   </p>
                 )}
@@ -1130,7 +1132,7 @@ export default function RidesPage() {
                   <XCircle className="w-4 h-4 text-red-500" />
                   Cancellation
                 </h4>
-                <div className="text-sm text-gray-700 space-y-1">
+                <div className="text-sm text-gray-700 space-y-1 break-words">
                   <div>
                     <span className="text-gray-500">Cancelled by: </span>
                     <span className="font-medium capitalize">
@@ -1308,7 +1310,7 @@ export default function RidesPage() {
       >
         {selectedRide && (
           <div className="space-y-4">
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 break-words">
               Pickup: <span className="font-medium text-gray-900">{selectedRide.pickup?.address}</span>
             </div>
             <div className="relative">
@@ -1545,7 +1547,7 @@ export default function RidesPage() {
           {selectedRide?.dispute && (
             <div className="bg-red-50 p-3 rounded-lg">
               <div className="text-sm font-medium text-red-900">Dispute Reason:</div>
-              <div className="text-sm text-red-800">{selectedRide.dispute.reason || 'Flagged for review'}</div>
+              <div className="text-sm text-red-800 break-words">{selectedRide.dispute.reason || 'Flagged for review'}</div>
             </div>
           )}
           <div>

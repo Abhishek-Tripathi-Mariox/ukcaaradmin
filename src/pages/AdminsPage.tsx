@@ -221,7 +221,7 @@ export default function AdminsPage() {
         title="Admin Users"
         subtitle="Manage admin accounts, roles, and permissions"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <RefreshButton onRefresh={refetch} isFetching={isFetching} />
             {canManage && (
               <button
@@ -330,9 +330,9 @@ export default function AdminsPage() {
               Share this password with the admin securely. It will not be shown again.
             </p>
             <div className="flex items-center gap-2 bg-gray-100 p-3 rounded font-mono text-sm">
-              <code className="flex-1 break-all">{tempPassword}</code>
+              <code className="flex-1 min-w-0 break-all">{tempPassword}</code>
               <button
-                className="p-1 hover:bg-gray-200 rounded"
+                className="shrink-0 p-1 hover:bg-gray-200 rounded"
                 onClick={() => {
                   navigator.clipboard.writeText(tempPassword);
                   toast.success('Copied');
@@ -381,20 +381,23 @@ function InviteModal({
         }}
         className="space-y-4"
       >
+        {/* max-w-full: these inputs have no width utility, so they render at
+            the browser default (~210px) and would overflow a half-width cell
+            once the modal narrows below ~480px. */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name" required>
             <input
               required
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              className="form-input"
+              className="form-input max-w-full"
             />
           </Field>
           <Field label="Last name">
             <input
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              className="form-input"
+              className="form-input max-w-full"
             />
           </Field>
         </div>
@@ -478,19 +481,20 @@ function EditModal({
         }}
         className="space-y-4"
       >
+        {/* max-w-full: same half-width-cell overflow guard as InviteModal. */}
         <div className="grid grid-cols-2 gap-3">
           <Field label="First name">
             <input
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              className="form-input"
+              className="form-input max-w-full"
             />
           </Field>
           <Field label="Last name">
             <input
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              className="form-input"
+              className="form-input max-w-full"
             />
           </Field>
         </div>

@@ -5,7 +5,15 @@ interface Column<T> {
   header: string;
   render?: (item: T) => React.ReactNode;
   className?: string;
+  /**
+   * Pin this column to the right edge so it stays visible while the table
+   * scrolls horizontally. Defaults to true for a column keyed 'actions' —
+   * the buttons an admin needs must never scroll out of view.
+   */
+  sticky?: boolean;
 }
+
+const isSticky = <T,>(c: Column<T>) => c.sticky ?? c.key === 'actions';
 
 interface DataTableProps<T> {
   columns: Column<T>[];
@@ -58,6 +66,7 @@ export function DataTable<T>({
                 key={column.key}
                 className={clsx(
                   'px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider',
+                  isSticky(column) && 'table-sticky-actions',
                   column.className
                 )}
               >
@@ -76,11 +85,23 @@ export function DataTable<T>({
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={clsx('px-4 py-3 text-sm', column.className)}
+                  className={clsx(
+                    'px-4 py-3 text-sm',
+                    isSticky(column) && 'table-sticky-actions',
+                    column.className
+                  )}
                 >
-                  {column.render
-                    ? column.render(item)
-                    : (item as any)[column.key]}
+                  {isSticky(column) ? (
+                    column.render ? column.render(item) : (item as any)[column.key]
+                  ) : (
+                    // Clamp non-action cells so one long value can't widen
+                    // its column past ~28rem and shove the table off-screen.
+                    <div className="cell-clamp">
+                      {column.render
+                        ? column.render(item)
+                        : (item as any)[column.key]}
+                    </div>
+                  )}
                 </td>
               ))}
             </tr>
@@ -178,7 +199,9 @@ export function Pagination({ page, totalPages, onPageChange, total, windowSize =
       <div className="text-sm text-gray-500">
         {total !== undefined && `Total: ${total} items`}
       </div>
-      <div className="flex items-center gap-1">
+      {/* flex-wrap: Previous + a 10-page window + Next is ~720px of buttons,
+          wider than the content area on a 1024px laptop viewport. */}
+      <div className="flex flex-wrap items-center gap-1">
         <button
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}

@@ -232,24 +232,6 @@ export default function SupportPage() {
       ),
     },
     {
-      key: 'assignee',
-      header: 'Assignee',
-      render: (t: Ticket) =>
-        t.assignedTo ? (
-          <span className="text-xs">{userName(t.assignedTo)}</span>
-        ) : (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              claim.mutate(t._id);
-            }}
-            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
-          >
-            <UserCheck className="w-3 h-3" /> Claim
-          </button>
-        ),
-    },
-    {
       key: 'sla',
       header: 'SLA',
       render: (t: Ticket) => {
@@ -277,6 +259,27 @@ export default function SupportPage() {
           {formatDistanceToNow(new Date(t.updatedAt), { addSuffix: true })}
         </span>
       ),
+    },
+    {
+      key: 'assignee',
+      header: 'Assignee',
+      // Last + pinned: the Claim button sat mid-table and scrolled off-screen
+      // at laptop widths, where seven columns can't fit.
+      sticky: true,
+      render: (t: Ticket) =>
+        t.assignedTo ? (
+          <span className="text-xs">{userName(t.assignedTo)}</span>
+        ) : (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              claim.mutate(t._id);
+            }}
+            className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+          >
+            <UserCheck className="w-3 h-3" /> Claim
+          </button>
+        ),
     },
   ];
 

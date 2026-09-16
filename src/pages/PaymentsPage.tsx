@@ -230,7 +230,7 @@ export default function PaymentsPage() {
         title="Payment Management"
         subtitle="Manage transactions, refunds, and payouts"
         actions={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <RefreshButton onRefresh={refetch} isFetching={isFetching} />
             <button
               onClick={() => setShowWalletModal(true)}
@@ -244,7 +244,7 @@ export default function PaymentsPage() {
       />
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6 border-b border-gray-200">
+      <div className="flex flex-wrap gap-2 mb-6 border-b border-gray-200">
         {[
           { key: 'payments', label: 'All Payments', icon: CreditCard },
           { key: 'payouts', label: 'Pending Payouts', icon: ArrowUpCircle },
@@ -334,12 +334,15 @@ export default function PaymentsPage() {
             </div>
           )}
           <div className="space-y-3">
+            {/* min-w-0 + break-words let a long driver name/email wrap instead
+                of pushing the amount off the card; shrink-0 stops the checkbox,
+                avatar circle and amount from being squeezed to make room. */}
             {(data?.data || []).map((payout: any) => (
               <div
                 key={payout.driverId}
-                className="flex items-center justify-between bg-white rounded-lg shadow-sm p-4"
+                className="flex items-center justify-between gap-4 bg-white rounded-lg shadow-sm p-4"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 min-w-0">
                   <input
                     type="checkbox"
                     checked={selectedPayouts.includes(payout.driverId)}
@@ -350,19 +353,19 @@ export default function PaymentsPage() {
                         setSelectedPayouts(selectedPayouts.filter((id) => id !== payout.driverId));
                       }
                     }}
-                    className="w-4 h-4 text-primary-600 rounded"
+                    className="w-4 h-4 text-primary-600 rounded shrink-0"
                   />
-                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center">
+                  <div className="w-10 h-10 bg-primary-100 rounded-full flex items-center justify-center shrink-0">
                     <span className="text-sm font-medium text-primary-700">
                       {payout.driverName?.[0] || 'D'}
                     </span>
                   </div>
-                  <div>
+                  <div className="min-w-0 break-words">
                     <div className="font-medium">{payout.driverName}</div>
                     <div className="text-sm text-gray-500">{payout.driverEmail}</div>
                   </div>
                 </div>
-                <div className="text-right">
+                <div className="text-right shrink-0">
                   <div className="text-lg font-semibold text-green-600">
                     ₹{payout.pendingAmount?.toFixed(2)}
                   </div>
@@ -448,14 +451,17 @@ export default function PaymentsPage() {
 
             <div className="border-t pt-4">
               <h4 className="font-medium text-gray-900 mb-3">User Information</h4>
+              {/* break-words: there is no space between the label and value
+                  spans, so "Email:" + a long address is one unbreakable token
+                  that would overflow its column and scroll the modal sideways. */}
               <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
+                <div className="min-w-0 break-words">
                   <span className="text-gray-500">Name:</span>
                   <span className="ml-2">
                     {detail.user?.firstName} {detail.user?.lastName}
                   </span>
                 </div>
-                <div>
+                <div className="min-w-0 break-words">
                   <span className="text-gray-500">Email:</span>
                   <span className="ml-2">{detail.user?.email}</span>
                 </div>
@@ -465,7 +471,7 @@ export default function PaymentsPage() {
             {detail.description && (
               <div className="border-t pt-4">
                 <h4 className="font-medium text-gray-900 mb-2">Description</h4>
-                <div className="text-sm text-gray-700">{detail.description}</div>
+                <div className="text-sm text-gray-700 break-words">{detail.description}</div>
               </div>
             )}
 

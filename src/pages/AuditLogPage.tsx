@@ -133,6 +133,9 @@ export default function AuditLogPage() {
     {
       key: 'view',
       header: '',
+      // Buttons column (not keyed 'actions'), so pin it explicitly — the
+      // key:'action' column above is audit data and must stay unpinned.
+      sticky: true,
       render: (e: AuditEntry) => (
         <button
           onClick={() => setSelected(e)}
@@ -157,7 +160,9 @@ export default function AuditLogPage() {
           <Filter className="w-4 h-4" />
           Filters
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
+        {/* 3 cols at lg: six cols in the ~690px lg content area crush each
+            control to ~105px and clip the date inputs' text. */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
           <select
             value={filters.action}
             onChange={(e) => {
@@ -291,7 +296,7 @@ export default function AuditLogPage() {
             </div>
           )}
           {selected.userAgent && (
-            <div className="mt-4 text-xs text-gray-500">
+            <div className="mt-4 text-xs text-gray-500 break-words">
               <strong>User agent:</strong> {selected.userAgent}
             </div>
           )}
