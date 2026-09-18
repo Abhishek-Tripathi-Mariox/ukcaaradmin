@@ -48,6 +48,7 @@ const DOC_LABELS: Record<string, string> = {
   'profile-photo': 'Profile photo',
   vehicle: 'Vehicle RC',
   'vehicle-photo': 'Vehicle photo',
+  passbook: 'Bank passbook',
   insurance: 'Insurance certificate',
   puc: 'Pollution certificate (PUC)',
   dbs: 'DBS check',
