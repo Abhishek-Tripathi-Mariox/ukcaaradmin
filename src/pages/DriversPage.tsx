@@ -1021,7 +1021,15 @@ function DriverDetailModal({
                 />
                 <StatCard
                   label="Commission"
-                  value={`${driver.driverProfile?.commissionRate ?? 20}%`}
+                  // What settlement actually applies (OnePass -> own rate ->
+                  // platform default), from the server — not a hardcoded 20%.
+                  value={
+                    (driver as any).effectiveCommissionPct != null
+                      ? `${(driver as any).effectiveCommissionPct}%${(driver as any).onePassActive ? ' (OnePass)' : ''}`
+                      : driver.driverProfile?.commissionRate != null
+                        ? `${driver.driverProfile.commissionRate}%`
+                        : '—'
+                  }
                 />
               </div>
 

@@ -89,7 +89,10 @@ function TabButton({
 
 interface CataloguePanelProps {
   queryKey: string;
-  api: typeof vehicleTypesAPI;
+  // Typed against the fuel API: the two catalogues share list/create/update/
+  // remove, and only vehicle types carry uploadIcon (called directly in the
+  // modal, not through this prop).
+  api: typeof fuelTypesAPI;
   singularLabel: string;
 }
 
@@ -139,6 +142,9 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
           <table className="w-full text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-600">
               <tr>
+                {singularLabel === 'vehicle type' && (
+                  <th className="px-3 py-2 text-left">Icon</th>
+                )}
                 <th className="px-3 py-2 text-left">Name</th>
                 <th className="px-3 py-2 text-left">Code</th>
                 <th className="px-3 py-2 text-left">Description</th>
@@ -156,6 +162,21 @@ function CataloguePanel({ queryKey, api, singularLabel }: CataloguePanelProps) {
             <tbody className="divide-y">
               {data.map((row) => (
                 <tr key={row._id}>
+                  {singularLabel === 'vehicle type' && (
+                    <td className="px-3 py-2">
+                      <div className="w-9 h-9 rounded border bg-gray-50 flex items-center justify-center overflow-hidden">
+                        {row.iconUrl ? (
+                          <img
+                            src={row.iconUrl}
+                            alt=""
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-gray-400">app</span>
+                        )}
+                      </div>
+                    </td>
+                  )}
                   <td className="px-3 py-2 font-medium text-gray-900">{row.name}</td>
                   <td className="px-3 py-2 text-gray-500">
                     <code className="text-xs">{row.code}</code>
@@ -294,6 +315,28 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
   const [perKmFare, setPerKmFare] = useState(fmt(initial?.perKmFare));
   const [perMinFare, setPerMinFare] = useState(fmt(initial?.perMinFare));
   const [minFare, setMinFare] = useState(fmt(initial?.minFare));
+  // Artwork for the customer ride picker. Empty = use the app's bundled art.
+  const [iconUrl, setIconUrl] = useState<string>(initial?.iconUrl ?? '');
+  const [iconUploading, setIconUploading] = useState(false);
+  const [iconError, setIconError] = useState<string | null>(null);
+
+  const pickIcon = async (file?: File | null) => {
+    if (!file) return;
+    setIconError(null);
+    setIconUploading(true);
+    try {
+      const res = await vehicleTypesAPI.uploadIcon(file);
+      const url = res.data?.data?.url ?? res.data?.url;
+      if (!url) throw new Error('Upload did not return a URL');
+      setIconUrl(url);
+    } catch (err: any) {
+      setIconError(
+        err?.response?.data?.message ?? err?.message ?? 'Could not upload the image.',
+      );
+    } finally {
+      setIconUploading(false);
+    }
+  };
 
   // Blank → null: the backend unsets the field on null, so a set fare
   // (or description) can actually be cleared. undefined would be JSON-dropped.
@@ -306,7 +349,8 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) return;
+    // Saving mid-upload dropped the new icon (the URL arrived after save).
+    if (!name.trim() || iconUploading) return;
     onSave({
       name: name.trim(),
       // Empty code → backend will auto-slugify from name
@@ -321,6 +365,8 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
             perKmFare: parseFare(perKmFare),
             perMinFare: parseFare(perMinFare),
             minFare: parseFare(minFare),
+            // null clears it on the backend, so the app reverts to its art.
+            iconUrl: iconUrl.trim() || null,
           }
         : {}),
     } as Partial<CatalogueType>);
@@ -333,6 +379,52 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
       onClose={onClose}
     >
       <form onSubmit={submit} className="space-y-4">
+        {isVehicleType && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Icon <span className="font-normal text-gray-400">(optional)</span>
+            </label>
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-lg border bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                {iconUrl ? (
+                  <img src={iconUrl} alt="" className="max-w-full max-h-full object-contain" />
+                ) : (
+                  <Car className="w-6 h-6 text-gray-300" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <input
+                  id="vehicle-type-icon"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  disabled={iconUploading}
+                  onChange={(e) => {
+                    pickIcon(e.target.files?.[0]);
+                    // Clear it so picking the same file again still fires.
+                    e.currentTarget.value = '';
+                  }}
+                  className="block w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {iconUploading
+                    ? 'Uploading…'
+                    : iconError
+                    ? iconError
+                    : 'PNG or WebP on a transparent background, about 200×200. Leave empty to use the app’s built-in artwork.'}
+                </p>
+              </div>
+              {iconUrl && !iconUploading && (
+                <button
+                  type="button"
+                  onClick={() => setIconUrl('')}
+                  className="text-xs text-red-600 hover:underline shrink-0"
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          </div>
+        )}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Display name
@@ -486,8 +578,13 @@ function EditModal({ initial, singularLabel, onClose, onSave }: EditModalProps) 
           <button type="button" onClick={onClose} className="btn btn-outline">
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary">
-            Save
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={iconUploading}
+            title={iconUploading ? 'Wait for the icon to finish uploading' : undefined}
+          >
+            {iconUploading ? 'Uploading…' : 'Save'}
           </button>
         </div>
       </form>

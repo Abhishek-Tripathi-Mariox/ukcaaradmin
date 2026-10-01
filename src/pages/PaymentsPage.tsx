@@ -205,7 +205,10 @@ export default function PaymentsPage() {
           >
             <Eye className="w-4 h-4 text-gray-500" />
           </button>
-          {payment.status === 'completed' && payment.type === 'ride_payment' && (
+          {payment.status === 'completed' &&
+            (payment.type === 'ride_payment' ||
+              // Razorpay-paid seat bookings need a refund action too.
+              ((payment.type as string) === 'scheduled_booking' && payment.method !== 'wallet')) && (
             <button
               onClick={(e) => {
                 e.stopPropagation();

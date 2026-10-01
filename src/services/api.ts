@@ -831,6 +831,12 @@ export interface CatalogueType {
    * the matching types. Fuel types ignore this field.
    */
   tier?: 'instant' | 'private';
+  /**
+   * Vehicle-type-only: artwork shown on the customer's ride picker. Optional —
+   * with none set, the app falls back to its bundled bike / auto / car art.
+   * null in a payload clears it.
+   */
+  iconUrl?: string | null;
   // Vehicle-type-only pricing. The customer's /rides/estimate and the
   // ride-create flow look these up by code and fall back to the legacy
   // baseFares table when a field is blank.
@@ -844,6 +850,17 @@ export interface CatalogueType {
 
 export const vehicleTypesAPI = {
   list: () => api.get('/admin/vehicle-types'),
+  /**
+   * Upload artwork for a vehicle type. Shares the platform's S3 upload
+   * endpoint; the `type` tag files it under vehicle-icon/ in the bucket.
+   * Content-Type is left to the browser so the multipart boundary is set.
+   */
+  uploadIcon: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('type', 'vehicle-icon');
+    return api.post('/uploads', form, { headers: { 'Content-Type': undefined } as any });
+  },
   create: (data: Partial<CatalogueType>) => api.post('/admin/vehicle-types', data),
   update: (id: string, data: Partial<CatalogueType>) =>
     api.put(`/admin/vehicle-types/${id}`, data),

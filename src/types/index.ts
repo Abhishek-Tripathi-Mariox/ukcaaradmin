@@ -144,7 +144,7 @@ export interface Payment {
   _id: string;
   user: User;
   ride?: Ride;
-  type: 'ride_payment' | 'subscription' | 'refund' | 'payout' | 'wallet_topup';
+  type: 'ride_payment' | 'scheduled_booking' | 'subscription' | 'refund' | 'payout' | 'wallet_topup';
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
