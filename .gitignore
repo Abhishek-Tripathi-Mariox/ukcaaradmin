@@ -13,3 +13,17 @@ npm-debug.log*
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local tests and test output
+__tests__/
+__mocks__/
+test/
+tests/
+*.test.*
+*.spec.*
+jest.config.*
+jest.setup.*
+setupTests.*
+coverage/
+test-results/
+playwright-report/
