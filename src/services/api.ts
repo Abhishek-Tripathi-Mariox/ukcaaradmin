@@ -135,10 +135,13 @@ export const referralsAPI = {
 // ════════════════════════════════════════════════════════════════════
 
 export const driversAPI = {
+  updateVehicle: (id: string, data: { vehicleMake: string; vehicleModel: string; vehicleTypeCode: string; seatingCapacity: number; plateNumber: string }) =>
+    api.put(`/admin/drivers/${id}/update-vehicle`, data),
   getAll: (params?: { page?: number; limit?: number; search?: string; status?: string; isOnline?: boolean; isOnePass?: boolean; minRating?: number; isVerified?: boolean; isActive?: boolean; serviceType?: string }) =>
     api.get('/admin/drivers', { params }),
 
   getById: (id: string) => api.get(`/admin/drivers/${id}`),
+  getAvailability: (id: string, params: { from: string; to: string }) => api.get(`/admin/drivers/${id}/availability`, { params }),
 
   getRides: (id: string, params?: { page?: number; limit?: number; status?: string }) =>
     api.get(`/admin/drivers/${id}/rides`, { params }),
@@ -159,7 +162,7 @@ export const driversAPI = {
   verifyDocument: (driverId: string, documentType: string, status: string, note?: string) =>
     api.patch(`/admin/drivers/${driverId}/documents/${documentType}/verify`, { status, note }),
   
-  updateCommission: (id: string, commissionRate: number) =>
+  updateCommission: (id: string, commissionRate: number | null) =>
     api.patch(`/admin/drivers/${id}/commission`, { commissionRate }),
   
   suspendDriver: (id: string, reason: string, duration?: number) =>
@@ -176,26 +179,26 @@ export const driversAPI = {
 // ════════════════════════════════════════════════════════════════════
 
 export const onePassAPI = {
-  getSubscribers: (params?: { page?: number; limit?: number; status?: string }) =>
+  getSubscribers: (params?: { page?: number; limit?: number; status?: string; category?: string; search?: string }) =>
     api.get('/admin/onepass/subscribers', { params }),
   
   getStats: () => api.get('/admin/onepass/stats'),
 
   getPlans: () => api.get('/admin/onepass/plans'),
-  updatePlans: (plans: { key: string; label: string; price: number; days: number; active: boolean }[]) =>
+  updatePlans: (plans: { key: string; label: string; category: string; commissionPct: number; price: number; days: number; active: boolean }[]) =>
     api.patch('/admin/onepass/plans', { plans }),
   
   // Backend defines these as PUT (admin.ts) — POST 404s and the button no-ops.
-  extendSubscription: (driverId: string, days: number) =>
-    api.put(`/admin/onepass/${driverId}/extend`, { days }),
+  extendSubscription: (driverId: string, days: number, category: string) =>
+    api.put(`/admin/onepass/${driverId}/extend`, { days, category }),
 
-  cancelSubscription: (driverId: string, reason: string) =>
-    api.put(`/admin/onepass/${driverId}/cancel`, { reason }),
+  cancelSubscription: (driverId: string, reason: string, category: string) =>
+    api.put(`/admin/onepass/${driverId}/cancel`, { reason, category }),
 
   // Backend grant reads `days`, not `duration` — sending `duration` made every
   // grant silently default to 30 days.
-  grantSubscription: (driverId: string, plan: string, duration: number, reason: string) =>
-    api.post(`/admin/onepass/${driverId}/grant`, { plan, days: duration, reason }),
+  grantSubscription: (driverId: string, plan: string, duration: number, reason: string, category: string) =>
+    api.post(`/admin/onepass/${driverId}/grant`, { plan, days: duration, reason, category }),
 };
 
 // ════════════════════════════════════════════════════════════════════
@@ -747,12 +750,12 @@ export const routesAPI = {
   create: (data: any) => api.post('/admin/routes', data),
   update: (id: string, data: any) => api.patch(`/admin/routes/${id}`, data),
   remove: (id: string) => api.delete(`/admin/routes/${id}`),
-  addDriver: (id: string, driverId: string, data?: { status?: string; note?: string }) =>
+  addDriver: (id: string, driverId: string, data?: { status?: string; note?: string; departureIndex?: number; replaceRoute?: boolean }) =>
     api.post(`/admin/routes/${id}/drivers`, { driverId, ...data }),
-  updateDriver: (id: string, driverId: string, data: { status: string; note?: string }) =>
+  updateDriver: (id: string, driverId: string, data: { status: string; note?: string; departureIndex?: number }) =>
     api.patch(`/admin/routes/${id}/drivers/${driverId}`, data),
-  removeDriver: (id: string, driverId: string) =>
-    api.delete(`/admin/routes/${id}/drivers/${driverId}`),
+  removeDriver: (id: string, driverId: string, departureIndex?: number) =>
+    api.delete(`/admin/routes/${id}/drivers/${driverId}`, { params: { departureIndex } }),
   assignUser: (id: string, userId: string) =>
     api.post(`/admin/routes/${id}/assigned-users`, { userId }),
   unassignUser: (id: string, userId: string) =>

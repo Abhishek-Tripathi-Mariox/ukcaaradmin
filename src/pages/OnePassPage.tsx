@@ -24,6 +24,8 @@ export default function OnePassPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [selectedDriver, setSelectedDriver] = useState<any>(null);
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const passCategories = (driver: any): string[] => [...new Set<string>((driver?.driverProfile?.onePassMemberships ?? []).filter((p: any) => !p.cancelledAt).map((p: any) => p.category))];
   const [showExtendModal, setShowExtendModal] = useState(false);
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showGrantModal, setShowGrantModal] = useState(false);
@@ -39,7 +41,7 @@ export default function OnePassPage() {
   const queryClient = useQueryClient();
 
   // ── Plan configuration (price/duration the driver app offers) ──
-  type PlanRow = { key: string; label: string; price: number; days: number; active: boolean };
+  type PlanRow = { key: string; label: string; category: string; commissionPct: number; price: number; days: number; active: boolean };
   const plansQ = useQuery({
     queryKey: ['onepass', 'plans'],
     queryFn: async () => (await onePassAPI.getPlans()).data?.data?.plans as PlanRow[],
@@ -94,19 +96,19 @@ export default function OnePassPage() {
 
   const extendMutation = useMutation({
     mutationFn: ({ driverId, days }: { driverId: string; days: number }) =>
-      onePassAPI.extendSubscription(driverId, days),
+      onePassAPI.extendSubscription(driverId, days, selectedCategory),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onepass'] });
       toast.success('Subscription extended');
       setShowExtendModal(false);
       setExtendDays(30);
     },
-    onError: () => toast.error('Failed to extend subscription'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to extend subscription'),
   });
 
   const cancelMutation = useMutation({
     mutationFn: ({ driverId, reason }: { driverId: string; reason: string }) =>
-      onePassAPI.cancelSubscription(driverId, reason),
+      onePassAPI.cancelSubscription(driverId, reason, selectedCategory),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onepass'] });
       toast.success('Subscription cancelled');
@@ -118,7 +120,7 @@ export default function OnePassPage() {
 
   const grantMutation = useMutation({
     mutationFn: (data: { driverId: string; plan: string; duration: number; reason: string }) =>
-      onePassAPI.grantSubscription(data.driverId, data.plan, data.duration, data.reason),
+      onePassAPI.grantSubscription(data.driverId, data.plan, data.duration, data.reason, planRows?.find(p => p.key === data.plan)?.category ?? ''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onepass'] });
       toast.success('Subscription granted');
@@ -126,7 +128,7 @@ export default function OnePassPage() {
       setGrantData(defaultGrant());
       setGrantUser(null);
     },
-    onError: () => toast.error('Failed to grant subscription'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to grant subscription'),
   });
 
   // Returns null when there is no valid expiry date, so callers can render a
@@ -187,8 +189,18 @@ export default function OnePassPage() {
     },
     {
       key: 'expires',
-      header: 'Expires',
+      header: 'Passes & validity',
       render: (driver: any) => {
+        const periods = (driver.driverProfile?.onePassMemberships ?? []).filter((p: any) => !p.cancelledAt);
+        const legacyExpiry = driver.onePass?.legacy?.expiresAt ?? driver.driverProfile?.onePassExpiry;
+        if (driver.onePass) return <div className="space-y-2 text-xs">
+          {legacyExpiry && <div>Legacy{driver.onePass.legacy ? ` · ${driver.onePass.legacy.commissionPct}% commission` : ''} · until {format(new Date(legacyExpiry), 'PPP')}</div>}
+          {periods.map((p: any, index: number) => <div key={index}>
+            <span className="capitalize font-medium">{p.category}</span> · {p.label} · {Math.round(p.commissionRate * 10000) / 100}% commission<br />
+            {format(new Date(p.startsAt), 'PPP')} – {format(new Date(p.expiresAt), 'PPP')}
+          </div>)}
+          {!legacyExpiry && !periods.length && 'Expired'}
+        </div>;
         const expiry = driver.driverProfile?.onePassExpiry;
         const daysRemaining = getDaysRemaining(expiry);
         if (daysRemaining === null) {
@@ -226,12 +238,13 @@ export default function OnePassPage() {
       key: 'status',
       header: 'Status',
       render: (driver: any) => {
-        const daysRemaining = getDaysRemaining(driver.driverProfile?.onePassExpiry);
-        const active = daysRemaining !== null && daysRemaining > 0;
+        const now = Date.now();
+        const active = !!driver.onePass?.legacy || (driver.onePass?.memberships ?? []).some((p: any) => new Date(p.startsAt).getTime() <= now && new Date(p.expiresAt).getTime() > now);
+        const queued = !active && driver.onePass?.memberships?.length > 0;
         return (
           <StatusBadge
-            status={active ? 'active' : 'expired'}
-            variant={active ? 'success' : 'danger'}
+            status={active ? 'active' : queued ? 'queued' : 'expired'}
+            variant={active ? 'success' : queued ? 'warning' : 'danger'}
           />
         );
       },
@@ -245,6 +258,7 @@ export default function OnePassPage() {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedDriver(driver);
+              setSelectedCategory(passCategories(driver)[0] ?? '');
               setShowExtendModal(true);
             }}
             className="p-2 hover:bg-green-50 rounded-lg"
@@ -256,6 +270,7 @@ export default function OnePassPage() {
             onClick={(e) => {
               e.stopPropagation();
               setSelectedDriver(driver);
+              setSelectedCategory(driver.onePass?.legacy ? 'legacy' : passCategories(driver)[0] ?? '');
               setShowCancelModal(true);
             }}
             className="p-2 hover:bg-red-50 rounded-lg"
@@ -304,7 +319,7 @@ export default function OnePassPage() {
                 planRows &&
                 setPlanRows([
                   ...planRows,
-                  { key: '', label: '', price: 0, days: 1, active: true },
+                  { key: '', label: '', category: 'scheduled', commissionPct: 0, price: 0, days: 1, active: false },
                 ])
               }
             >
@@ -322,6 +337,7 @@ export default function OnePassPage() {
         <p className="text-sm text-gray-500 mb-4">
           These are the exact plans and prices the driver app offers. The price is charged
           server-side, so the app can never bill a value you didn't set here.
+          {' '}Configure each category’s price, validity and commission before making its plans active. Existing paid benefits remain valid until expiry.
         </p>
         {!planRows ? (
           <p className="text-sm text-gray-400 py-4">Loading plans…</p>
@@ -332,6 +348,8 @@ export default function OnePassPage() {
                 <tr className="text-left text-gray-500 border-b">
                   <th className="py-2 pr-3">Key</th>
                   <th className="py-2 pr-3">Label</th>
+                  <th className="py-2 pr-3">Category</th>
+                  <th className="py-2 pr-3">Commission (%)</th>
                   <th className="py-2 pr-3">Price (₹)</th>
                   <th className="py-2 pr-3">Duration (days)</th>
                   <th className="py-2 pr-3">Active</th>
@@ -348,6 +366,10 @@ export default function OnePassPage() {
                       <input className="input input-sm w-36" value={row.label}
                         onChange={(e) => setPlanField(i, 'label', e.target.value)} />
                     </td>
+                    <td className="py-2 pr-3"><select className="input input-sm" value={row.category} onChange={e => setPlanField(i, 'category', e.target.value)}>
+                      {['scheduled', 'instant', 'private'].map(category => <option key={category} value={category}>{category}</option>)}
+                    </select></td>
+                    <td className="py-2 pr-3"><input type="number" min={0} max={100} step="0.01" className="input input-sm w-24" value={row.commissionPct} onChange={e => setPlanField(i, 'commissionPct', Number(e.target.value))} /></td>
                     <td className="py-2 pr-3">
                       <input type="number" min={0} className="input input-sm w-28" value={row.price}
                         onChange={(e) => setPlanField(i, 'price', Number(e.target.value))} />
@@ -457,6 +479,8 @@ export default function OnePassPage() {
         title="Extend Subscription"
       >
         <div className="space-y-4">
+          <label className="block text-sm">Category<select className="input mt-1" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}><option value="">Choose category</option>{passCategories(selectedDriver).map(category => <option key={category} value={category}>{category}</option>)}</select></label>
+          {!passCategories(selectedDriver).length && <p className="text-sm text-amber-700">Legacy subscriptions renew using a category plan. Use Grant OnePass to assign one.</p>}
           <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
             <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center shrink-0">
               <Crown className="w-5 h-5 text-purple-600" />
@@ -466,9 +490,7 @@ export default function OnePassPage() {
                 {selectedDriver?.firstName} {selectedDriver?.lastName}
               </div>
               <div className="text-sm text-gray-500">
-                Current expiry: {selectedDriver?.driverProfile?.onePassExpiry
-                  ? format(new Date(selectedDriver.driverProfile.onePassExpiry), 'PPP')
-                  : '—'}
+                The extension keeps this category’s last purchased commission terms and starts after its existing validity.
               </div>
             </div>
           </div>
@@ -496,7 +518,7 @@ export default function OnePassPage() {
                 }
               }}
               className="btn btn-primary"
-              disabled={extendMutation.isPending}
+              disabled={extendMutation.isPending || !selectedCategory || selectedCategory === 'legacy'}
             >
               Extend
             </button>
@@ -514,6 +536,7 @@ export default function OnePassPage() {
         title="Cancel Subscription"
       >
         <div className="space-y-4">
+          <label className="block text-sm">Cancel category<select className="input mt-1" value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)}><option value="">Choose category</option>{selectedDriver?.onePass?.legacy && <option value="legacy">Legacy pass</option>}{passCategories(selectedDriver).map(category => <option key={category} value={category}>{category}</option>)}</select></label>
           <p className="text-gray-600 break-words">
             Are you sure you want to cancel the OnePass subscription for {selectedDriver?.firstName} {selectedDriver?.lastName}?
           </p>
@@ -540,7 +563,7 @@ export default function OnePassPage() {
                 }
               }}
               className="btn btn-danger"
-              disabled={!cancelReason || cancelMutation.isPending}
+              disabled={!cancelReason || !selectedCategory || cancelMutation.isPending}
             >
               Cancel Subscription
             </button>
@@ -591,7 +614,7 @@ export default function OnePassPage() {
             >
               {(planRows ?? []).map((p) => (
                 <option key={p.key} value={p.key} disabled={!p.active}>
-                  {p.label} · {p.days} days · ₹{p.price}
+                  {p.category} · {p.label} · {p.days} days · ₹{p.price} · {p.commissionPct}% commission
                   {p.active ? '' : ' (inactive)'}
                 </option>
               ))}
@@ -640,7 +663,7 @@ export default function OnePassPage() {
                 }
               }}
               className="btn btn-primary"
-              disabled={!grantData.driverId || !grantData.reason || grantMutation.isPending}
+              disabled={!grantData.driverId || !grantData.reason || !planRows?.some(p => p.key === grantData.plan && p.active) || grantMutation.isPending}
             >
               Grant OnePass
             </button>

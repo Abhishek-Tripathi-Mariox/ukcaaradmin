@@ -15,6 +15,8 @@ const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const ALL_DAYS = [0, 1, 2, 3, 4, 5, 6];
 
 type ScheduleTimingKey =
+  | 'minimumJourneyMinutes'
+  | 'turnaroundMinutes'
   | 'bookingCutoffMinutes'
   | 'maxAdvanceBookingDays'
   | 'startWindowMinutes'
@@ -30,7 +32,12 @@ const TIMING_FIELDS: Array<{
   max: number;
   defaultValue: number;
   hint: string;
+  required?: boolean;
 }> = [
+  { key: 'minimumJourneyMinutes', label: 'Minimum one-way journey duration (minutes)', min: 1, max: 1440, defaultValue: 0, required: true,
+    hint: 'Required. Example: enter 120 for a two-hour trip. Departure checks include the return travel needed to reach the next start point.' },
+  { key: 'turnaroundMinutes', label: 'Turnaround gap (minutes)', min: 0, max: 1440, defaultValue: 0,
+    hint: 'Extra time after travel and repositioning before this driver can depart again. Default: 0.' },
   {
     key: 'bookingCutoffMinutes',
     label: 'Booking cutoff (minutes)',
@@ -88,6 +95,7 @@ interface Stop {
 }
 
 interface Departure {
+  direction?: 'outbound' | 'return';
   stopIndex: number;
   time: string;
 }
@@ -104,14 +112,14 @@ interface RouteForm {
     departures: Departure[];
     returnDepartures: Departure[];
     seatPrice?: number;
-    vehicleType?: string;
-    totalSeats?: number;
     /** Timing overrides — undefined means "use the platform default" and
      *  the key is omitted from the save payload entirely. */
     bookingCutoffMinutes?: number;
     maxAdvanceBookingDays?: number;
     startWindowMinutes?: number;
     minRestMinutes?: number;
+    minimumJourneyMinutes?: number;
+    turnaroundMinutes?: number;
     cancellationCutoffMinutes?: number;
   };
 }
@@ -140,10 +148,17 @@ const blankForm = (): RouteForm => ({
     departures: [],
     returnDepartures: [],
     seatPrice: 0,
-    vehicleType: '',
-    totalSeats: 1,
   },
 });
+
+function publishedDepartures(schedule: any): Departure[] {
+  const slots: Departure[] = [...(schedule?.departures ?? [])];
+  for (const slot of schedule?.returnDepartures ?? []) {
+    if (!slots.some(existing => existing.direction === 'return' && existing.time === slot.time && existing.stopIndex === slot.stopIndex))
+      slots.push({ ...slot, direction: 'return' });
+  }
+  return slots;
+}
 
 export default function RoutesPage() {
   const qc = useQueryClient();
@@ -293,9 +308,7 @@ export default function RoutesPage() {
                   {r.type === 'scheduled' && r.schedule?.seatPrice !== undefined && (
                     <span>Seat ₹{r.schedule.seatPrice}</span>
                   )}
-                  {r.type === 'scheduled' && r.schedule?.totalSeats !== undefined && (
-                    <span>{r.schedule.totalSeats} seats</span>
-                  )}
+                  {r.type === 'scheduled' && <span>Seats vary by vehicle</span>}
                   {Array.isArray(r.stops) && r.stops.length >= 2 && (
                     <span>
                       End-to-end ₹
@@ -424,11 +437,9 @@ function toFormValue(r: any): RouteForm {
         Array.isArray(r.schedule?.daysOfWeek) && r.schedule.daysOfWeek.length > 0
           ? r.schedule.daysOfWeek
           : [...ALL_DAYS],
-      departures: r.schedule?.departures ?? [],
-      returnDepartures: r.schedule?.returnDepartures ?? [],
+      departures: publishedDepartures(r.schedule),
+      returnDepartures: [],
       seatPrice: r.schedule?.seatPrice ?? 0,
-      vehicleType: r.schedule?.vehicleType ?? '',
-      totalSeats: r.schedule?.totalSeats ?? 0,
       // Timing overrides round-trip into the form; absent stays absent so an
       // untouched save doesn't pin the current platform default onto the route.
       bookingCutoffMinutes:
@@ -447,6 +458,8 @@ function toFormValue(r: any): RouteForm {
         typeof r.schedule?.minRestMinutes === 'number'
           ? r.schedule.minRestMinutes
           : undefined,
+      minimumJourneyMinutes: r.schedule?.minimumJourneyMinutes,
+      turnaroundMinutes: r.schedule?.turnaroundMinutes,
       cancellationCutoffMinutes:
         typeof r.schedule?.cancellationCutoffMinutes === 'number'
           ? r.schedule.cancellationCutoffMinutes
@@ -508,9 +521,6 @@ function RouteFormModal({
     }
 
     if (isScheduled) {
-      if ((Number(form.schedule?.totalSeats) || 0) < 1) {
-        next.schedule = 'Total seats must be at least 1';
-      }
       if ((form.schedule?.daysOfWeek ?? []).length === 0) {
         next.days = 'A scheduled route must run on at least one day of the week';
       }
@@ -526,7 +536,8 @@ function RouteFormModal({
       const timing: Partial<Record<ScheduleTimingKey, string>> = {};
       for (const tf of TIMING_FIELDS) {
         const v = form.schedule?.[tf.key];
-        if (v === undefined) continue; // empty box = platform default
+        if (v === undefined && !tf.required) continue; // empty box = platform default
+        if (v === undefined) { timing[tf.key] = 'Set the minimum one-way journey duration'; continue; }
         if (!Number.isInteger(v) || v < tf.min || v > tf.max) {
           timing[tf.key] = `Enter a whole number between ${tf.min} and ${tf.max}, or leave empty for the default`;
         }
@@ -560,6 +571,7 @@ function RouteFormModal({
         payload.schedule = {
           daysOfWeek: form.schedule?.daysOfWeek ?? [],
           departures: (form.schedule?.departures ?? []).map((d) => ({
+            direction: d.direction,
             stopIndex: Number(d.stopIndex),
             time: d.time,
           })),
@@ -568,8 +580,6 @@ function RouteFormModal({
             time: d.time,
           })),
           seatPrice: Number(form.schedule?.seatPrice) || 0,
-          vehicleType: form.schedule?.vehicleType?.trim() || undefined,
-          totalSeats: Number(form.schedule?.totalSeats) || 0,
         };
         // Timing overrides: only send fields the admin actually filled in.
         // An empty box must NOT become 0 — omitting the key keeps the route
@@ -668,38 +678,12 @@ function RouteFormModal({
       },
     }));
 
-  const addReturnDeparture = () =>
-    setForm((f) => ({
-      ...f,
-      schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
-        returnDepartures: [
-          ...(f.schedule?.returnDepartures ?? []),
-          { stopIndex: 0, time: '17:00' },
-        ],
-      },
-    }));
-
-  const updateReturnDeparture = (idx: number, patch: Partial<Departure>) =>
-    setForm((f) => ({
-      ...f,
-      schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
-        returnDepartures: (f.schedule?.returnDepartures ?? []).map((d, i) =>
-          i === idx ? { ...d, ...patch } : d
-        ),
-      },
-    }));
-
-  const removeReturnDeparture = (idx: number) =>
-    setForm((f) => ({
-      ...f,
-      schedule: {
-        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
-        returnDepartures: (f.schedule?.returnDepartures ?? []).filter((_, i) => i !== idx),
-      },
-    }));
-
+  const addReturnDeparture = () => setForm(f => ({ ...f, schedule: {
+    ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
+    departures: [...(f.schedule?.departures ?? []), { stopIndex: f.stops.length - 1, time: '17:00', direction: 'return' }],
+  } }));
+  const updateReturnDeparture = updateDeparture;
+  const removeReturnDeparture = removeDeparture;
   return (
     <Modal
       isOpen={true}
@@ -938,44 +922,9 @@ function RouteFormModal({
                   }
                 />
               </div>
-              <div>
-                <label className="text-xs text-gray-600">Total seats</label>
-                <input
-                  type="number"
-                  min={1}
-                  className="input"
-                  value={form.schedule?.totalSeats ?? 0}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      schedule: {
-                        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
-                        totalSeats: Number(e.target.value),
-                      },
-                    }))
-                  }
-                />
-                {errors.schedule && (
-                  <p className="text-[11px] text-red-600 mt-1">{errors.schedule}</p>
-                )}
-              </div>
-              <div>
-                <label className="text-xs text-gray-600">Vehicle type</label>
-                <input
-                  className="input"
-                  placeholder="e.g. minibus, sedan…"
-                  value={form.schedule?.vehicleType ?? ''}
-                  onChange={(e) =>
-                    setForm((f) => ({
-                      ...f,
-                      schedule: {
-                        ...(f.schedule ?? { daysOfWeek: [], departures: [], returnDepartures: [] }),
-                        vehicleType: e.target.value,
-                      },
-                    }))
-                  }
-                />
-              </div>
+              <p className="text-sm text-gray-500 md:col-span-2 self-center">
+                Model, vehicle type and passenger seats are configured on each driver's vehicle.
+              </p>
             </div>
 
             <div className="mt-3">
@@ -1011,8 +960,7 @@ function RouteFormModal({
                 Timing rules
               </label>
               <p className="text-[11px] text-gray-500 mb-2">
-                All times are IST. Leave a field empty to use the platform
-                default.
+                All times are IST. Set the required journey duration. Other empty fields use the platform default.
               </p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {TIMING_FIELDS.map((tf) => (
@@ -1024,7 +972,7 @@ function RouteFormModal({
                       max={tf.max}
                       step={1}
                       className={`input ${errors.timing?.[tf.key] ? 'input-error' : ''}`}
-                      placeholder={`Default: ${tf.defaultValue}`}
+                      placeholder={tf.required ? 'Required, e.g. 120' : `Default: ${tf.defaultValue}`}
                       aria-invalid={!!errors.timing?.[tf.key]}
                       value={form.schedule?.[tf.key] ?? ''}
                       onChange={(e) => {
@@ -1066,7 +1014,7 @@ function RouteFormModal({
                 </button>
               </div>
               <div className="space-y-2">
-                {(form.schedule?.departures ?? []).map((d, i) => (
+                {(form.schedule?.departures ?? []).map((d, i) => d.direction !== 'return' && (
                   <div
                     key={i}
                     className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded"
@@ -1107,7 +1055,7 @@ function RouteFormModal({
                     </button>
                   </div>
                 ))}
-                {(form.schedule?.departures ?? []).length === 0 && (
+                {!(form.schedule?.departures ?? []).some(d => d.direction !== 'return') && (
                   <div className="text-xs text-gray-500">
                     No departures yet.
                   </div>
@@ -1128,7 +1076,7 @@ function RouteFormModal({
                 times to customers.
               </p>
               <div className="space-y-2">
-                {(form.schedule?.returnDepartures ?? []).map((d, i) => (
+                {(form.schedule?.departures ?? []).map((d, i) => d.direction === 'return' && (
                   <div
                     key={i}
                     className="grid grid-cols-12 gap-2 items-center bg-gray-50 p-2 rounded"
@@ -1169,7 +1117,7 @@ function RouteFormModal({
                     </button>
                   </div>
                 ))}
-                {(form.schedule?.returnDepartures ?? []).length === 0 && (
+                {!(form.schedule?.departures ?? []).some(d => d.direction === 'return') && (
                   <div className="text-xs text-gray-500">
                     No return departures.
                   </div>
@@ -1226,6 +1174,8 @@ function ManageRouteModal({
   // Driver picker — search the global driver pool to assign someone to this
   // route. Debounced so we don't fire a request on every keystroke.
   const [driverSearch, setDriverSearch] = useState('');
+  const [assignmentDeparture, setAssignmentDeparture] = useState<string>('');
+  const [replaceAssignmentRoute, setReplaceAssignmentRoute] = useState(false);
   const [driverSearchDebounced, setDriverSearchDebounced] = useState('');
   useEffect(() => {
     const t = setTimeout(() => setDriverSearchDebounced(driverSearch.trim()), 300);
@@ -1256,10 +1206,12 @@ function ManageRouteModal({
     mutationFn: ({
       driverId,
       status,
+      departureIndex,
     }: {
       driverId: string;
       status: string;
-    }) => routesAPI.updateDriver(route._id, driverId, { status }),
+      departureIndex?: number;
+    }) => routesAPI.updateDriver(route._id, driverId, { status, departureIndex }),
     onSuccess: () => {
       toast.success('Updated');
       refetchAll();
@@ -1269,8 +1221,8 @@ function ManageRouteModal({
   });
 
   const removeDriverMut = useMutation({
-    mutationFn: (driverId: string) =>
-      routesAPI.removeDriver(route._id, driverId),
+    mutationFn: ({ driverId, departureIndex }: { driverId: string; departureIndex?: number }) =>
+      routesAPI.removeDriver(route._id, driverId, departureIndex),
     onSuccess: () => {
       toast.success('Driver removed');
       refetchAll();
@@ -1280,11 +1232,13 @@ function ManageRouteModal({
   });
 
   const assignDriverMut = useMutation({
-    mutationFn: (driverId: string) => routesAPI.addDriver(route._id, driverId),
+    mutationFn: (driverId: string) => routesAPI.addDriver(route._id, driverId,
+      (full?.type ?? route.type) === 'scheduled' ? { departureIndex: Number(assignmentDeparture), replaceRoute: replaceAssignmentRoute } : undefined),
     onSuccess: () => {
       toast.success('Driver assigned to route');
       setDriverSearch('');
       setDriverSearchDebounced('');
+      setReplaceAssignmentRoute(false);
       refetchAll();
     },
     onError: (e: any) =>
@@ -1374,6 +1328,14 @@ function ManageRouteModal({
             <label className="text-xs font-medium text-gray-600 block mb-1">
               Assign a driver
             </label>
+            {(full?.type ?? route.type) === 'scheduled' && <label className="block text-xs text-gray-600 mb-3">
+              Departure time
+              <select className="input mt-1 w-full" value={assignmentDeparture} onChange={event => setAssignmentDeparture(event.target.value)}>
+                <option value="">Select a published departure</option>
+                {(full?.schedule?.departures ?? route.schedule?.departures ?? []).map((departure: any, index: number) => <option key={index} value={index}>{departure.time}{departure.direction === 'return' ? ' · Return' : ' · Outward'}</option>)}
+              </select>
+            </label>}
+            {(full?.type ?? route.type) === 'scheduled' && <label className="flex gap-2 items-start text-xs text-gray-600 mb-3"><input type="checkbox" checked={replaceAssignmentRoute} onChange={event => setReplaceAssignmentRoute(event.target.checked)} />Change the driver’s current route. Existing commitments must be resolved; only one route will remain active.</label>}
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
@@ -1395,7 +1357,9 @@ function ManageRouteModal({
                   </div>
                 ) : (
                   driverResults.map((d: any) => {
-                    const alreadyOnRoute = registeredDriverIds.has(String(d._id));
+                    const alreadyOnRoute = (full?.type ?? route.type) === 'scheduled'
+                      ? drivers.some((reg: any) => String(reg.driver?._id ?? reg.driver) === String(d._id) && ['approved', 'pending'].includes(reg.status) && reg.departureIndex === Number(assignmentDeparture))
+                      : registeredDriverIds.has(String(d._id));
                     const fullName =
                       d.firstName || d.lastName
                         ? `${d.firstName ?? ''} ${d.lastName ?? ''}`.trim()
@@ -1418,12 +1382,12 @@ function ManageRouteModal({
                         </div>
                         {alreadyOnRoute ? (
                           <span className="shrink-0 inline-flex items-center gap-1 text-xs text-gray-400 px-2 py-1">
-                            <Check size={13} /> On route
+                            <Check size={13} /> Already assigned
                           </span>
                         ) : (
                           <button
                             className="btn-primary text-xs inline-flex items-center gap-1 shrink-0 px-3 py-1.5"
-                            disabled={assignDriverMut.isPending}
+                            disabled={assignDriverMut.isPending || ((full?.type ?? route.type) === 'scheduled' && assignmentDeparture === '')}
                             onClick={() => assignDriverMut.mutate(String(d._id))}
                           >
                             <UserPlus size={13} /> Assign
@@ -1452,7 +1416,7 @@ function ManageRouteModal({
             const driverId = drv._id || d.driver;
             return (
               <div
-                key={driverId}
+                key={`${driverId}_${d.departureIndex ?? 'private'}_${d.status}_${d.lastServiceDate ?? ''}`}
                 className="border rounded p-3 flex items-center justify-between gap-3"
               >
                 <div className="min-w-0">
@@ -1464,6 +1428,9 @@ function ManageRouteModal({
                   <div className="text-xs text-gray-500">
                     {drv.phone || drv.email || ''}
                   </div>
+                  {Number.isInteger(d.departureIndex) && <div className="text-xs text-gray-600">{full?.schedule?.departures?.[d.departureIndex]?.time ?? 'Departure removed'} · {full?.schedule?.departures?.[d.departureIndex]?.direction === 'return' ? 'Return' : 'Outward'}</div>}
+                  {d.firstServiceDate && <div className="text-xs text-gray-500">From {d.firstServiceDate}</div>}
+                  {d.lastServiceDate && <div className="text-xs text-gray-500">Through {d.lastServiceDate}</div>}
                   <div className="text-[11px] text-gray-400 mt-0.5">
                     Status:{' '}
                     <span className="font-medium text-gray-700">{d.status}</span>
@@ -1475,7 +1442,7 @@ function ManageRouteModal({
                     <button
                       className="btn-ghost text-xs text-green-700"
                       onClick={() =>
-                        driverMut.mutate({ driverId, status: 'approved' })
+                        driverMut.mutate({ driverId, status: 'approved', departureIndex: d.departureIndex })
                       }
                     >
                       Approve
@@ -1485,7 +1452,7 @@ function ManageRouteModal({
                     <button
                       className="btn-ghost text-xs text-amber-700"
                       onClick={() =>
-                        driverMut.mutate({ driverId, status: 'rejected' })
+                        driverMut.mutate({ driverId, status: 'rejected', departureIndex: d.departureIndex })
                       }
                     >
                       Reject
@@ -1493,7 +1460,7 @@ function ManageRouteModal({
                   )}
                   <button
                     className="btn-ghost text-xs text-red-600"
-                    onClick={() => removeDriverMut.mutate(driverId)}
+                    onClick={() => removeDriverMut.mutate({ driverId, departureIndex: d.departureIndex })}
                   >
                     Remove
                   </button>

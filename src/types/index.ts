@@ -25,12 +25,16 @@ export interface DriverProfile {
   vehicleModel?: string;
   vehicleYear?: string;
   vehicleColor?: string;
+  vehicleTypeCode?: string;
+  seatingCapacity?: number;
   plateNumber?: string;
   licenceNumber?: string;
   insuranceNumber?: string;
 
   // Status
   isOnline: boolean;
+  lastSeenAt?: string;
+  onlineExpiresAt?: string | null;
   isOnePass: boolean;
   onePassExpiry?: string;
 
@@ -68,6 +72,13 @@ export interface DriverDocument {
 
 export interface Driver extends User {
   driverProfile: DriverProfile;
+  effectiveCommissionPct?: number;
+  commissionSource?: 'platform' | 'override' | 'onepass';
+  commissionOverridePct?: number | null;
+  platformCommissionPct?: number;
+  onePassCommissionPct?: number;
+  onePassActive?: boolean;
+  onePassExpiresAt?: string | null;
   /** Scheduled-service drivers: their shuttle-route registration (approved,
    *  else the pending request). Attached by the admin driver endpoints. */
   routeRegistration?: { routeId: string; routeName: string; status: string };

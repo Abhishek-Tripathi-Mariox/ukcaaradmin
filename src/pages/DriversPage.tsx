@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { driversAPI } from '@/services/api';
+import { driversAPI, vehicleTypesAPI } from '@/services/api';
 import { DataTable, Pagination } from '@/components/DataTable';
 import { Modal, ConfirmModal } from '@/components/Modal';
 import { PageHeader, StatusBadge, LoadingSpinner, RefreshButton } from '@/components/common';
@@ -55,12 +55,32 @@ const DOC_LABELS: Record<string, string> = {
   phv: 'PHV licence',
 };
 
-type DetailTab = 'overview' | 'rides' | 'documents' | 'stats';
+type DetailTab = 'overview' | 'rides' | 'documents' | 'stats' | 'availability';
 
 const formatGBP = (n?: number) =>
   `₹${(n ?? 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+
+function commissionLabel(driver: Driver): string {
+  const percentage = driver.effectiveCommissionPct;
+  if (percentage == null) return '—';
+  const resolvedSource = driver.commissionSource ?? (driver.onePassActive ? 'onepass' : driver.driverProfile?.commissionRate != null ? 'override' : 'platform');
+  const source = resolvedSource === 'onepass' ? 'OnePass' : resolvedSource === 'override' ? 'Custom' : 'Default';
+  return `${percentage}% (${source})`;
+}
+
+function onlineNow(driver: Driver): boolean {
+  const profile = driver.driverProfile;
+  const until = profile?.onlineExpiresAt ? Date.parse(profile.onlineExpiresAt) : Date.parse(profile?.lastSeenAt ?? '') + 120000;
+  return profile?.isOnline === true && Number.isFinite(until) && until > Date.now();
+}
+function usePresenceClock() {
+  const [, tick] = useState(0);
+  useEffect(() => { const timer = window.setInterval(() => tick(value => value + 1), 5000); return () => window.clearInterval(timer); }, []);
+}
+
 export default function DriversPage() {
+  usePresenceClock();
   const qc = useQueryClient();
 
   // Honour a ?tab= deep-link (e.g. the dashboard's "Review Applications"
@@ -93,7 +113,9 @@ export default function DriversPage() {
   const [rejectReason, setRejectReason] = useState('');
   const [suspendReason, setSuspendReason] = useState('');
   const [suspendDuration, setSuspendDuration] = useState(7);
-  const [commissionRate, setCommissionRate] = useState(20);
+  const [commissionRate, setCommissionRate] = useState('');
+  const [commissionMode, setCommissionMode] = useState<'default' | 'custom'>('default');
+  const [commissionDriver, setCommissionDriver] = useState<Driver | null>(null);
 
   const listQuery = useQuery({
     queryKey: [
@@ -136,9 +158,12 @@ export default function DriversPage() {
       return res.data?.data;
     },
     placeholderData: keepPreviousData,
+    // Presence expires on the server even when this page stays open.
+    refetchInterval: 15_000,
   });
 
-  const drivers: Driver[] = listQuery.data?.drivers ?? [];
+  const drivers: Driver[] = (listQuery.data?.drivers ?? []).filter((driver: Driver) =>
+    tab === 'online' || (tab === 'all' && onlineFilter === 'online') ? onlineNow(driver) : true);
   const pagination = listQuery.data?.pagination;
 
   const invalidate = () => qc.invalidateQueries({ queryKey: ['drivers'] });
@@ -216,7 +241,7 @@ export default function DriversPage() {
   });
 
   const commissionMutation = useMutation({
-    mutationFn: ({ id, rate }: { id: string; rate: number }) =>
+    mutationFn: ({ id, rate }: { id: string; rate: number | null }) =>
       driversAPI.updateCommission(id, rate),
     onSuccess: () => {
       invalidate();
@@ -224,7 +249,7 @@ export default function DriversPage() {
       toast.success('Commission updated');
       setShowCommissionModal(false);
     },
-    onError: () => toast.error('Failed to update commission'),
+    onError: (error: any) => toast.error(error?.response?.data?.message || 'Failed to update commission'),
   });
 
   // Advanced filters available on the All Drivers tab (Online tab forces
@@ -253,7 +278,7 @@ export default function DriversPage() {
         <div className="flex items-center gap-3 min-w-0">
           <div className="relative shrink-0">
             <Avatar driver={d} size={40} />
-            {d.driverProfile?.isOnline && (
+            {onlineNow(d) && (
               <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />
             )}
           </div>
@@ -320,6 +345,11 @@ export default function DriversPage() {
       ),
     },
     {
+      key: 'commission',
+      header: 'Commission',
+      render: (driver: Driver) => <span className="text-sm">{commissionLabel(driver)}</span>,
+    },
+    {
       key: 'earnings',
       header: 'Earnings',
       render: (d: Driver) => (
@@ -332,7 +362,7 @@ export default function DriversPage() {
       render: (d: Driver) => (
         <div className="flex flex-col gap-1 items-start">
           <StatusBadge status={driverStatusLabel(d)} />
-          {d.driverProfile?.isOnePass && (
+          {d.onePassActive && (
             <span className="badge bg-purple-100 text-purple-800 inline-flex items-center gap-1">
               <Crown className="w-3 h-3" /> OnePass
             </span>
@@ -400,7 +430,7 @@ export default function DriversPage() {
               <CheckCircle className="w-4 h-4 text-green-500" />
             </button>
           )}
-          {d.driverProfile?.isOnline && (
+          {onlineNow(d) && (
             <button
               onClick={() => forceOfflineMutation.mutate({ id: d._id, reason: 'Admin action' })}
               className="p-1.5 hover:bg-yellow-50 rounded"
@@ -642,8 +672,11 @@ export default function DriversPage() {
               forceOfflineMutation.mutate({ id: selectedDriver._id, reason: 'Admin action' }),
             approve: () => setShowApproveModal(true),
             reject: () => setShowRejectModal(true),
-            updateCommission: (rate) => {
-              setCommissionRate(rate);
+            updateCommission: (driver) => {
+              setCommissionDriver(driver);
+              const override = driver.commissionOverridePct ?? driver.driverProfile?.commissionRate;
+              setCommissionMode(override == null ? 'default' : 'custom');
+              setCommissionRate(override != null ? String(override) : String(driver.platformCommissionPct ?? ''));
               setShowCommissionModal(true);
             },
             verifyDocument: ({ documentType, status, note }) => {
@@ -785,27 +818,22 @@ export default function DriversPage() {
         size="md"
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600">
-            Set the platform commission percentage for{' '}
-            <strong>
-              {selectedDriver?.firstName} {selectedDriver?.lastName}
-            </strong>
-            . Default is 20%.
-          </p>
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">
-              Commission rate (%)
-            </label>
-            <input
-              type="number"
-              value={commissionRate}
-              onChange={(e) => setCommissionRate(Number(e.target.value))}
-              min={0}
-              max={100}
-              step={0.5}
-              className="input"
-            />
-          </div>
+          <p className="text-sm text-gray-600">Commission settings for <strong>{commissionDriver?.firstName} {commissionDriver?.lastName}</strong>.</p>
+          <p className="text-sm text-gray-600">Current effective rate: <strong>{commissionDriver ? commissionLabel(commissionDriver) : '—'}</strong>.</p>
+          <label className="flex items-start gap-2 text-sm">
+            <input type="radio" name="commission-mode" checked={commissionMode === 'default'} onChange={() => setCommissionMode('default')} />
+            <span>Use platform default{commissionDriver?.platformCommissionPct != null ? ` (${commissionDriver.platformCommissionPct}%)` : ''}<span className="block text-xs text-gray-500">Future default changes apply automatically.</span></span>
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="radio" name="commission-mode" checked={commissionMode === 'custom'} onChange={() => setCommissionMode('custom')} />
+            Custom commission for this driver
+          </label>
+          {commissionMode === 'default' && commissionDriver?.platformCommissionPct == null && <p className="text-sm text-amber-700">Reload driver details to load the current platform default before saving.</p>}
+          {commissionMode === 'custom' && <div>
+            <label htmlFor="driver-commission-rate" className="block text-xs font-medium text-gray-700 mb-1">Commission rate (%)</label>
+            <input id="driver-commission-rate" type="number" value={commissionRate} onChange={event => setCommissionRate(event.target.value)} min={0} max={100} step={0.01} className="input" />
+          </div>}
+          {commissionDriver?.onePassActive && <p className="rounded-lg bg-purple-50 p-3 text-sm text-purple-800">Active OnePass applies {commissionDriver.onePassCommissionPct}% until expiry. These settings apply when OnePass is no longer active.</p>}
           <div className="flex justify-end gap-2 border-t pt-3">
             <button
               onClick={() => setShowCommissionModal(false)}
@@ -815,11 +843,11 @@ export default function DriversPage() {
             </button>
             <button
               onClick={() =>
-                selectedDriver &&
-                commissionMutation.mutate({ id: selectedDriver._id, rate: commissionRate })
+                commissionDriver &&
+                commissionMutation.mutate({ id: commissionDriver._id, rate: commissionMode === 'default' ? null : Number(commissionRate) })
               }
               className="btn btn-primary"
-              disabled={commissionMutation.isPending}
+              disabled={commissionMutation.isPending || !commissionDriver || (commissionMode === 'default' && commissionDriver.platformCommissionPct == null) || (commissionMode === 'custom' && (!commissionRate.trim() || !Number.isFinite(Number(commissionRate)) || Number(commissionRate) < 0 || Number(commissionRate) > 100))}
             >
               {commissionMutation.isPending ? 'Saving…' : 'Save'}
             </button>
@@ -836,7 +864,7 @@ interface DetailActions {
   forceOffline: () => void;
   approve: () => void;
   reject: () => void;
-  updateCommission: (rate: number) => void;
+  updateCommission: (driver: Driver) => void;
   verifyDocument: (args: { documentType: string; status: 'verified' | 'rejected'; note?: string }) => void;
 }
 
@@ -851,6 +879,7 @@ function DriverDetailModal({
   onAction: DetailActions;
   initialTab?: DetailTab;
 }) {
+  usePresenceClock();
   const [tab, setTab] = useState<DetailTab>(initialTab);
   const [ridesPage, setRidesPage] = useState(1);
   const [rideStatusFilter, setRideStatusFilter] = useState<string>('');
@@ -908,12 +937,12 @@ function DriverDetailModal({
                   {driver.firstName} {driver.lastName}
                 </h3>
                 <StatusBadge status={driverStatusLabel(driver)} />
-                {driver.driverProfile?.isOnline && (
+                {onlineNow(driver) && (
                   <span className="badge bg-green-100 text-green-700 inline-flex items-center gap-1">
                     <Wifi className="w-3 h-3" /> Online
                   </span>
                 )}
-                {driver.driverProfile?.isOnePass && (
+              {driver.onePassActive && (
                   <span className="badge bg-purple-100 text-purple-800 inline-flex items-center gap-1">
                     <Crown className="w-3 h-3" /> OnePass
                   </span>
@@ -959,14 +988,14 @@ function DriverDetailModal({
                   <CheckCircle className="w-4 h-4 mr-1" /> Reactivate
                 </button>
               )}
-              {driver.driverProfile?.isOnline && (
+              {onlineNow(driver) && (
                 <button onClick={onAction.forceOffline} className="btn btn-secondary btn-sm">
                   <WifiOff className="w-4 h-4 mr-1" /> Force offline
                 </button>
               )}
               <button
                 onClick={() =>
-                  onAction.updateCommission(driver.driverProfile?.commissionRate ?? 20)
+                  onAction.updateCommission(driver)
                 }
                 className="btn btn-secondary btn-sm"
               >
@@ -982,6 +1011,7 @@ function DriverDetailModal({
                 { key: 'rides', label: 'Rides' },
                 { key: 'documents', label: 'Documents' },
                 { key: 'stats', label: 'Stats' },
+                { key: 'availability', label: 'Availability' },
               ] as { key: DetailTab; label: string }[]
             ).map(({ key, label }) => (
               <button
@@ -999,6 +1029,7 @@ function DriverDetailModal({
             ))}
           </div>
 
+          {tab === 'availability' && <DriverAvailabilityPanel driverId={driverId} />}
           {tab === 'overview' && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -1021,15 +1052,7 @@ function DriverDetailModal({
                 />
                 <StatCard
                   label="Commission"
-                  // What settlement actually applies (OnePass -> own rate ->
-                  // platform default), from the server — not a hardcoded 20%.
-                  value={
-                    (driver as any).effectiveCommissionPct != null
-                      ? `${(driver as any).effectiveCommissionPct}%${(driver as any).onePassActive ? ' (OnePass)' : ''}`
-                      : driver.driverProfile?.commissionRate != null
-                        ? `${driver.driverProfile.commissionRate}%`
-                        : '—'
-                  }
+                  value={commissionLabel(driver)}
                 />
               </div>
 
@@ -1043,7 +1066,7 @@ function DriverDetailModal({
 
               <DriverLiveLocationSection
                 location={driver.driverProfile?.currentLocation}
-                isOnline={!!driver.driverProfile?.isOnline}
+                isOnline={!!onlineNow(driver)}
                 driverName={`${driver.firstName ?? ''} ${driver.lastName ?? ''}`.trim()}
                 updatedAt={(driver.driverProfile as any)?.locationUpdatedAt}
               />
@@ -1066,11 +1089,14 @@ function DriverDetailModal({
               <Section title="Vehicle">
                 <KV label="Make">{driver.driverProfile?.vehicleMake || '—'}</KV>
                 <KV label="Model">{driver.driverProfile?.vehicleModel || '—'}</KV>
+                <KV label="Vehicle type">{driver.driverProfile?.vehicleTypeCode || '—'}</KV>
+                <KV label="Passenger seats">{driver.driverProfile?.seatingCapacity ?? 'Not configured'}</KV>
                 <KV label="Year">{driver.driverProfile?.vehicleYear || '—'}</KV>
                 <KV label="Colour">{driver.driverProfile?.vehicleColor || '—'}</KV>
                 <KV label="Plate">{driver.driverProfile?.plateNumber || '—'}</KV>
                 <KV label="Insurance #">{driver.driverProfile?.insuranceNumber || '—'}</KV>
                 <KV label="Licence #">{driver.driverProfile?.licenceNumber || '—'}</KV>
+                <VehicleEditor key={driver._id} driver={driver} onSaved={() => { detailQuery.refetch(); }} />
                 {driver.driverProfile?.currentLocation && (
                   <KV label="Last location">
                     <span className="inline-flex items-center gap-1">
@@ -1082,10 +1108,10 @@ function DriverDetailModal({
                 )}
               </Section>
 
-              {driver.driverProfile?.isOnePass && driver.driverProfile?.onePassExpiry && (
+              {driver.onePassActive && driver.onePassExpiresAt && (
                 <Section title="OnePass">
                   <KV label="Expiry">
-                    {format(new Date(driver.driverProfile.onePassExpiry), 'PPP')}
+                    {format(new Date(driver.onePassExpiresAt), 'PPP')}
                   </KV>
                 </Section>
               )}
@@ -1438,6 +1464,52 @@ function DriverDetailModal({
   );
 }
 
+function VehicleEditor({ driver, onSaved }: { driver: Driver; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    vehicleMake: driver.driverProfile?.vehicleMake ?? '',
+    vehicleModel: driver.driverProfile?.vehicleModel ?? '',
+    vehicleTypeCode: driver.driverProfile?.vehicleTypeCode ?? '',
+    seatingCapacity: String(driver.driverProfile?.seatingCapacity ?? ''),
+    plateNumber: driver.driverProfile?.plateNumber ?? '',
+  });
+  const types = useQuery({ queryKey: ['admin-vehicle-types'], queryFn: async () => (await vehicleTypesAPI.list()).data?.data?.types ?? [], enabled: editing });
+  const eligibleTypes = (types.data ?? []).filter((type: any) => type.isActive !== false &&
+    (!['instant', 'private'].includes(driver.driverProfile?.serviceType ?? '') || (type.tier ?? 'instant') === driver.driverProfile?.serviceType));
+  const validType = eligibleTypes.some((type: any) => type.code === form.vehicleTypeCode);
+  const save = useMutation({
+    mutationFn: () => driversAPI.updateVehicle(driver._id, { ...form, seatingCapacity: Number(form.seatingCapacity) }),
+    onSuccess: () => { toast.success('Vehicle updated'); setEditing(false); onSaved(); },
+    onError: (error: any) => toast.error(error.response?.data?.message ?? 'Could not update vehicle'),
+  });
+  if (!editing) return <button type="button" className="btn btn-secondary mt-3" onClick={() => {
+    setForm({ vehicleMake: driver.driverProfile?.vehicleMake ?? '', vehicleModel: driver.driverProfile?.vehicleModel ?? '',
+      vehicleTypeCode: driver.driverProfile?.vehicleTypeCode ?? '', seatingCapacity: String(driver.driverProfile?.seatingCapacity ?? ''),
+      plateNumber: driver.driverProfile?.plateNumber ?? '' });
+    setEditing(true);
+  }}>Edit vehicle</button>;
+  return <form className="mt-3 space-y-3" onSubmit={event => { event.preventDefault(); if (validType && !types.isError) save.mutate(); }}>
+    {(['vehicleMake', 'vehicleModel', 'plateNumber'] as const).map((field, index) => <label className="block text-xs" key={field}>
+      {['Make', 'Model', 'Plate number'][index]}
+      <input className="input mt-1" required value={form[field]} onChange={event => setForm({ ...form, [field]: event.target.value })} />
+    </label>)}
+    <label className="block text-xs">Vehicle type
+      <select className="input mt-1" required value={validType ? form.vehicleTypeCode : ''} onChange={event => setForm({ ...form, vehicleTypeCode: event.target.value })}>
+        <option value="">Select vehicle type</option>
+        {eligibleTypes.map((type: any) => <option key={type.code} value={type.code}>{type.name}</option>)}
+      </select>
+    </label>
+    {types.isError && <button type="button" className="text-sm text-red-600" onClick={() => types.refetch()}>Could not load vehicle types. Retry</button>}
+    {!types.isLoading && !types.isError && eligibleTypes.length === 0 && <p className="text-sm text-amber-700">Configure an active vehicle type for this driver’s service before saving.</p>}
+    <label className="block text-xs">Passenger seats (excluding driver)
+      <input className="input mt-1" type="number" min={1} max={100} step={1} required value={form.seatingCapacity} onChange={event => setForm({ ...form, seatingCapacity: event.target.value })} />
+    </label>
+    <p className="text-xs text-gray-500">Vehicle changes apply to new departures. Existing booked trips keep their vehicle details and seats.</p>
+    <div className="flex gap-2"><button className="btn btn-primary" disabled={save.isPending || types.isError || !validType} type="submit">Save vehicle</button>
+      <button className="btn btn-secondary" disabled={save.isPending} type="button" onClick={() => setEditing(false)}>Cancel</button></div>
+  </form>;
+}
+
 function Avatar({ driver, size = 40 }: { driver: Driver; size?: number }) {
   const initials = `${driver.firstName?.[0] ?? ''}${driver.lastName?.[0] ?? ''}`.toUpperCase();
   if (driver.avatar) {
@@ -1678,4 +1750,22 @@ function DriverLiveLocationSection({
       )}
     </div>
   );
+}
+
+function DriverAvailabilityPanel({ driverId }: { driverId: string }) {
+  const today = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 10);
+  const [date, setDate] = useState(today);
+  const availability = useQuery({ queryKey: ['driver-availability', driverId, date], queryFn: async () => (await driversAPI.getAvailability(driverId, { from: date, to: date })).data?.data, refetchInterval: 15000, enabled: Boolean(date) });
+  return <div className="space-y-4">
+    <p className="text-sm text-gray-600">Scheduled departure availability is separate from Online Now. Bookings must be resolved before a driver can mark a departure unavailable. All dates and times are IST.</p>
+    <label className="block text-sm font-medium">Service date<input type="date" className="input mt-1" value={date} onChange={event => setDate(event.target.value)} /></label>
+    {availability.isLoading ? <LoadingSpinner /> : availability.isError ? <p role="alert">Could not load availability. <button className="btn btn-secondary" onClick={() => availability.refetch()}>Retry</button></p> : <>
+      {(availability.data?.slots ?? []).map((slot: any) => <div key={slot.routeId + slot.departureIndex} className="rounded-lg border p-4">
+        <p className="font-semibold">{slot.routeName} · {slot.departureTime} IST</p>
+        <p>{slot.available ? 'Available' : 'Unavailable'} · {slot.bookings} confirmed booking(s) · {slot.bookedSeats} booked seat(s){slot.running ? ' · Journey running' : ''}</p>
+      </div>)}
+      {!availability.data?.slots?.length && <p className="text-sm text-gray-500">No current assigned departures for this date.</p>}
+      {(availability.data?.exceptions ?? []).filter((exception: any) => !(availability.data?.slots ?? []).some((slot: any) => slot.routeId === exception.routeId && slot.departureKey === exception.departureKey)).map((exception: any) => <div key={exception.routeId + exception.departureKey} className="rounded-lg border p-4 text-sm">{exception.routeName} · {exception.departureTime} IST · Unavailable (previous assignment or changed schedule)</div>)}
+    </>}
+  </div>;
 }

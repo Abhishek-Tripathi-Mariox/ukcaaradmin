@@ -24,7 +24,8 @@ interface VehicleFareConfig {
 interface FareSettings {
   baseFares: Record<string, VehicleFareConfig>;
   commission: number;        // platform commission fraction (0–1)
-  onePassCommission?: number; // commission fraction for OnePass drivers (0–1)
+  onePassCommission: number; // commission fraction for OnePass drivers (0–1)
+  onePassCategoryPricingEnabled?: boolean;
   cancellationFee: number;
   minFare: number;
 }
@@ -57,6 +58,7 @@ function NumInput({
   max,
   step = 0.5,
   className = '',
+  disabled = false,
 }: {
   value: number;
   onChange: (v: number) => void;
@@ -64,6 +66,7 @@ function NumInput({
   max?: number;
   step?: number;
   className?: string;
+  disabled?: boolean;
 }) {
   const [text, setText] = useState<string>(String(value ?? 0));
   const [prevVal, setPrevVal] = useState<number>(value);
@@ -76,6 +79,7 @@ function NumInput({
   return (
     <input
       type="number"
+      disabled={disabled}
       min={min}
       max={max}
       step={step}
@@ -326,7 +330,11 @@ export default function FareCalculationPage() {
     queryKey: ['fare-settings'],
     queryFn: async () => {
       const res = await settingsAPI.getFareConfig();
-      return res.data?.data as FareSettings | undefined;
+      const data = res.data?.data as FareSettings | undefined;
+      if (!data || !Number.isFinite(data.commission) || data.commission < 0 || data.commission > 1 || !Number.isFinite(data.onePassCommission) || data.onePassCommission < 0 || data.onePassCommission > 1) {
+        throw new Error('Could not load current commission settings.');
+      }
+      return data;
     },
   });
 
@@ -355,7 +363,7 @@ export default function FareCalculationPage() {
   const effectiveConfig: Record<string, VehicleFareConfig> = localConfig ?? buildInitialConfig(vehicleTypes, baseFares);
   const round2 = (n: number) => Math.round(n * 100) / 100;
   const effectiveCommissionPct =
-    commissionPct ?? round2((fareData?.commission ?? 0.2) * 100);
+    commissionPct ?? round2((fareData?.commission ?? 0) * 100);
   const effectiveOnePassPct =
     onePassPct ?? round2((fareData?.onePassCommission ?? 0) * 100);
   const effectiveCancellationFee = cancellationFee ?? (fareData?.cancellationFee ?? 50);
@@ -396,12 +404,15 @@ export default function FareCalculationPage() {
         onePassCommission: effectiveOnePassPct,
         cancellationFee: effectiveCancellationFee,
       }),
-    onSuccess: () => {
+    onSuccess: (response) => {
+      if (response.data?.data) queryClient.setQueryData(['fare-settings'], response.data.data);
       toast.success('Fare configuration saved');
       queryClient.invalidateQueries({ queryKey: ['fare-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['drivers'] });
+      queryClient.invalidateQueries({ queryKey: ['driver-detail'] });
+      queryClient.invalidateQueries({ queryKey: ['driver-stats'] });
       setLocalConfig(null);
       setCommissionPct(null);
-    setOnePassPct(null);
       setOnePassPct(null);
       setCancellationFee(null);
     },
@@ -411,6 +422,7 @@ export default function FareCalculationPage() {
   function handleReset() {
     setLocalConfig(buildInitialConfig(vehicleTypes, baseFares));
     setCommissionPct(null);
+    setOnePassPct(null);
     setCancellationFee(null);
     toast('Reset to saved values', { icon: '↩️' });
   }
@@ -433,6 +445,11 @@ export default function FareCalculationPage() {
       {isLoading ? (
         <div className="flex justify-center py-16">
           <LoadingSpinner />
+        </div>
+      ) : !fareData ? (
+        <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-800">
+          <p>Could not load the saved commission settings. Refresh before making changes.</p>
+          <button className="btn btn-secondary mt-3" onClick={() => { refetchFare(); refetchVehicles(); }}>Retry</button>
         </div>
       ) : (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
@@ -507,12 +524,12 @@ export default function FareCalculationPage() {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Platform's cut of each fare. Applies on the next ride after saving.
+                    Default for drivers without a custom rate or active OnePass. Updates apply to future settlements.
                   </p>
                 </div>
                 <div>
                   <label className="text-xs font-medium text-gray-500 block mb-1">
-                    OnePass Commission (%)
+                    Legacy OnePass Commission (%)
                   </label>
                   <NumInput
                     min={0}
@@ -520,10 +537,11 @@ export default function FareCalculationPage() {
                     step={1}
                     value={effectiveOnePassPct}
                     onChange={setOnePassPct}
+                    disabled
                     className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Cut taken from drivers with an active OnePass. 0 means OnePass drivers keep the full fare.
+                    Existing passes retain this benefit until expiry. Set Scheduled, Instant and Private commission benefits in OnePass plans.
                   </p>
                 </div>
                 <div>
