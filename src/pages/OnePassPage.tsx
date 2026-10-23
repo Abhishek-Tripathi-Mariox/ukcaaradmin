@@ -60,10 +60,13 @@ export default function OnePassPage() {
   });
   const setPlanField = (i: number, field: keyof PlanRow, value: any) =>
     setPlanRows((rows) => rows?.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)) ?? rows);
-  // The grant modal's plan picker mirrors these rows — not a hardcoded
-  // weekly/monthly/yearly list that had drifted from the plans actually sold.
+  // The grant modal's plan picker mirrors the SAVED plans — not a hardcoded
+  // weekly/monthly/yearly list, and not unsaved edits in the table above: the
+  // backend grants the saved plan, so an edited row would grant other terms.
+  const savedPlans = plansQ.data ?? null;
+  const formatPct = (pct: number) => Math.round(pct * 100) / 100;
   const defaultGrant = () => {
-    const first = planRows?.find((p) => p.active) ?? planRows?.[0];
+    const first = savedPlans?.find((p) => p.active) ?? savedPlans?.[0];
     return {
       driverId: '',
       plan: first?.key ?? 'monthly',
@@ -115,12 +118,12 @@ export default function OnePassPage() {
       setShowCancelModal(false);
       setCancelReason('');
     },
-    onError: () => toast.error('Failed to cancel subscription'),
+    onError: (e: any) => toast.error(e?.response?.data?.message || 'Failed to cancel subscription'),
   });
 
   const grantMutation = useMutation({
     mutationFn: (data: { driverId: string; plan: string; duration: number; reason: string }) =>
-      onePassAPI.grantSubscription(data.driverId, data.plan, data.duration, data.reason, planRows?.find(p => p.key === data.plan)?.category ?? ''),
+      onePassAPI.grantSubscription(data.driverId, data.plan, data.duration, data.reason, savedPlans?.find(p => p.key === data.plan)?.category ?? ''),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['onepass'] });
       toast.success('Subscription granted');
@@ -194,7 +197,7 @@ export default function OnePassPage() {
         const periods = (driver.driverProfile?.onePassMemberships ?? []).filter((p: any) => !p.cancelledAt);
         const legacyExpiry = driver.onePass?.legacy?.expiresAt ?? driver.driverProfile?.onePassExpiry;
         if (driver.onePass) return <div className="space-y-2 text-xs">
-          {legacyExpiry && <div>Legacy{driver.onePass.legacy ? ` · ${driver.onePass.legacy.commissionPct}% commission` : ''} · until {format(new Date(legacyExpiry), 'PPP')}</div>}
+          {legacyExpiry && <div>Legacy{driver.onePass.legacy ? ` · ${formatPct(driver.onePass.legacy.commissionPct)}% commission` : ''} · until {format(new Date(legacyExpiry), 'PPP')}</div>}
           {periods.map((p: any, index: number) => <div key={index}>
             <span className="capitalize font-medium">{p.category}</span> · {p.label} · {Math.round(p.commissionRate * 10000) / 100}% commission<br />
             {format(new Date(p.startsAt), 'PPP')} – {format(new Date(p.expiresAt), 'PPP')}
@@ -602,7 +605,7 @@ export default function OnePassPage() {
               onChange={(e) => {
                 // Take the plan's own duration so the grant matches what the
                 // driver app sells; the days field below stays editable.
-                const row = planRows?.find((p) => p.key === e.target.value);
+                const row = savedPlans?.find((p) => p.key === e.target.value);
                 setGrantData({
                   ...grantData,
                   plan: e.target.value,
@@ -610,11 +613,11 @@ export default function OnePassPage() {
                 });
               }}
               className="input"
-              disabled={!planRows}
+              disabled={!savedPlans}
             >
-              {(planRows ?? []).map((p) => (
+              {(savedPlans ?? []).map((p) => (
                 <option key={p.key} value={p.key} disabled={!p.active}>
-                  {p.category} · {p.label} · {p.days} days · ₹{p.price} · {p.commissionPct}% commission
+                  {p.category} · {p.label} · {p.days} days · ₹{p.price} · {formatPct(p.commissionPct)}% commission
                   {p.active ? '' : ' (inactive)'}
                 </option>
               ))}
@@ -663,7 +666,7 @@ export default function OnePassPage() {
                 }
               }}
               className="btn btn-primary"
-              disabled={!grantData.driverId || !grantData.reason || !planRows?.some(p => p.key === grantData.plan && p.active) || grantMutation.isPending}
+              disabled={!grantData.driverId || !grantData.reason || !savedPlans?.some(p => p.key === grantData.plan && p.active) || grantMutation.isPending}
             >
               Grant OnePass
             </button>

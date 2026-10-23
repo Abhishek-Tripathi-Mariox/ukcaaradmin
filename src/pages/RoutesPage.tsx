@@ -151,6 +151,17 @@ const blankForm = (): RouteForm => ({
   },
 });
 
+/** Mirrors the backend: an outward slot needs a stop after its origin, a
+ *  return slot a stop before it. */
+const validOrigin = (d: Departure, stopIndex: number, stopCount: number) =>
+  Number.isInteger(stopIndex) && stopIndex >= 0 && stopIndex < stopCount &&
+  (d.direction === 'return' ? stopIndex > 0 : stopIndex < stopCount - 1);
+
+const slotName = (d: Departure, stops: Stop[]) =>
+  `${d.direction === 'return' ? 'Return' : 'Outward'} departure ${d.time || '(no time)'}${
+    stops[d.stopIndex]?.name ? ` from ${stops[d.stopIndex].name}` : ''
+  }`;
+
 function publishedDepartures(schedule: any): Departure[] {
   const slots: Departure[] = [...(schedule?.departures ?? [])];
   for (const slot of schedule?.returnDepartures ?? []) {
@@ -190,8 +201,12 @@ export default function RoutesPage() {
       qc.invalidateQueries({ queryKey: ['routes'] });
       setDeleting(null);
     },
-    onError: (e: any) =>
-      toast.error(e?.response?.data?.message || 'Delete failed'),
+    // The server refuses (409) while bookings, running trips or driver
+    // departures depend on the route; show its explanation in full.
+    onError: (e: any) => {
+      toast.error(e?.response?.data?.message || 'Delete failed', { duration: 10000 });
+      setDeleting(null);
+    },
   });
 
   return (
@@ -397,9 +412,10 @@ export default function RoutesPage() {
           onClose={() => setDeleting(null)}
           onConfirm={() => deleteMut.mutate(deleting._id)}
           title="Delete route?"
-          message={`This will permanently remove "${deleting.name}".`}
+          message={`This permanently removes "${deleting.name}". It is refused while the route has confirmed bookings, a running journey, or pending or approved driver departures. To take a route out of service, edit it and untick Active instead; that stops new bookings and keeps trips, payments and history intact.`}
           confirmText="Delete"
           variant="danger"
+          isLoading={deleteMut.isPending}
         />
       )}
     </div>
@@ -531,8 +547,28 @@ function RouteFormModal({
         const bad = deps.find(
           (d) => !/^([01]\d|2[0-3]):[0-5]\d$/.test(d.time || '')
         );
+        const n = form.stops.length;
+        const misplaced = deps.find((d) => !validOrigin(d, d.stopIndex, n));
+        const seen = new Set<string>();
+        const duplicate = deps.find((d) => {
+          const key = `${d.time}|${d.stopIndex}|${d.direction ?? 'outbound'}`;
+          if (seen.has(key)) return true;
+          seen.add(key);
+          return false;
+        });
         if (bad) next.departures = 'Each departure needs a valid HH:MM time';
+        else if (misplaced)
+          next.departures = !form.stops[misplaced.stopIndex]
+            ? `${slotName(misplaced, form.stops)} has no starting stop. Choose one.`
+            : misplaced.direction === 'return'
+            ? `${slotName(misplaced, form.stops)} starts at the first stop. Return departures must start after it.`
+            : `${slotName(misplaced, form.stops)} starts at the last stop. Outward departures must start before it.`;
+        else if (duplicate)
+          next.departures = `${slotName(duplicate, form.stops)} is listed twice. Remove the duplicate.`;
       }
+      const [first, last] = [form.stops[0], form.stops[form.stops.length - 1]];
+      if (form.stops.length >= 2 && Number(first.lat) === Number(last.lat) && Number(first.lng) === Number(last.lng) && (first.lat || first.lng))
+        next.stops = 'The first and last stops are the same place. Circular routes are not supported: end the route at its turnaround stop and add return departures for the way back.';
       const timing: Partial<Record<ScheduleTimingKey, string>> = {};
       for (const tf of TIMING_FIELDS) {
         const v = form.schedule?.[tf.key];
@@ -611,14 +647,43 @@ function RouteFormModal({
   };
 
   const removeStop = (idx: number) => {
+    if (form.stops.length <= 2) return;
+    // Departures keep their origin stop: later stops shift down by one, and a
+    // departure whose origin was removed is cleared until a new stop is chosen.
+    const orphaned = (form.schedule?.departures ?? []).filter((d) => d.stopIndex === idx).length;
     setForm((f) => ({
       ...f,
-      stops: f.stops.length <= 2 ? f.stops : f.stops.filter((_, i) => i !== idx),
+      stops: f.stops.filter((_, i) => i !== idx),
+      schedule: f.schedule && {
+        ...f.schedule,
+        departures: f.schedule.departures.map((d) => ({
+          ...d,
+          stopIndex: d.stopIndex === idx ? -1 : d.stopIndex > idx ? d.stopIndex - 1 : d.stopIndex,
+        })),
+      },
     }));
+    if (orphaned)
+      toast.error(`${orphaned} departure${orphaned === 1 ? '' : 's'} started at the removed stop. Choose a new starting stop before saving.`);
   };
 
-  const addStop = () =>
-    setForm((f) => ({ ...f, stops: [...f.stops, emptyStop(f.stops.length)] }));
+  const addStop = () => {
+    // New stops go on the end. Return departures from the old final stop stay
+    // anchored to the end of the route instead of silently starting mid-route.
+    const last = form.stops.length - 1;
+    const anchored = (form.schedule?.departures ?? []).filter((d) => d.direction === 'return' && d.stopIndex === last).length;
+    setForm((f) => ({
+      ...f,
+      stops: [...f.stops, emptyStop(f.stops.length)],
+      schedule: f.schedule && {
+        ...f.schedule,
+        departures: f.schedule.departures.map((d) =>
+          d.direction === 'return' && d.stopIndex === f.stops.length - 1 ? { ...d, stopIndex: f.stops.length } : d
+        ),
+      },
+    }));
+    if (anchored)
+      toast(`Return departures now start from the new final stop #${last + 2}. Change them if they should start from stop #${last + 1}.`);
+  };
 
   const toggleDay = (d: number) => {
     const current = form.schedule?.daysOfWeek ?? [];
@@ -1028,7 +1093,13 @@ function RouteFormModal({
                         })
                       }
                     >
-                      {form.stops.map((s, si) => (
+                      {/* Outward slots cannot start at the final stop. */}
+                      {!validOrigin(d, d.stopIndex, form.stops.length) && (
+                        <option value={d.stopIndex} disabled>
+                          {form.stops[d.stopIndex] ? `#${d.stopIndex + 1} ${form.stops[d.stopIndex].name || '(unnamed)'} (not allowed)` : 'Choose a starting stop'}
+                        </option>
+                      )}
+                      {form.stops.map((s, si) => validOrigin(d, si, form.stops.length) && (
                         <option key={si} value={si}>
                           #{si + 1} {s.name || '(unnamed)'}
                         </option>
@@ -1073,7 +1144,8 @@ function RouteFormModal({
               <p className="text-[11px] text-gray-500 mb-2">
                 Leave empty if this route doesn't run a return leg. Drivers who
                 opt into round-trip on their registration will offer these
-                times to customers.
+                times to customers. A return that starts mid-route allows the
+                driver one full one-way journey to reach its starting stop.
               </p>
               <div className="space-y-2">
                 {(form.schedule?.departures ?? []).map((d, i) => d.direction === 'return' && (
@@ -1090,7 +1162,13 @@ function RouteFormModal({
                         })
                       }
                     >
-                      {form.stops.map((s, si) => (
+                      {/* Return slots cannot start at the first stop. */}
+                      {!validOrigin(d, d.stopIndex, form.stops.length) && (
+                        <option value={d.stopIndex} disabled>
+                          {form.stops[d.stopIndex] ? `#${d.stopIndex + 1} ${form.stops[d.stopIndex].name || '(unnamed)'} (not allowed)` : 'Choose a starting stop'}
+                        </option>
+                      )}
+                      {form.stops.map((s, si) => validOrigin(d, si, form.stops.length) && (
                         <option key={si} value={si}>
                           #{si + 1} {s.name || '(unnamed)'}
                         </option>
